@@ -111,7 +111,7 @@ fp-bigdata
 │   ├── consumer.py
 │   └── producer.py
 ├── data_source/
-│   └── insurance.csv
+│   └── flight.csv
 ├── frontend_ui/
 │   ├── index.html
 │   └── script.js
