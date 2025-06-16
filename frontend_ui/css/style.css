@@ -1,0 +1,170 @@
+/* ===================== */
+/* THEME: DARK FLIGHT UI */
+/* ===================== */
+
+:root {
+    --background-color: #121212;
+    --primary-color: #1f2937;
+    --secondary-color: #374151;
+    --accent-color: #3b82f6;
+    --text-color: #f3f4f6;
+    --muted-color: #9ca3af;
+    --highlight-color: #22d3ee;
+    --card-radius: 12px;
+    --transition-speed: 0.3s;
+}
+
+/* ===== GLOBAL RESET ===== */
+body {
+    margin: 0;
+    padding: 0;
+    font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-color);
+}
+
+/* ====== PAGE STRUCTURE ====== */
+.container {
+    max-width: 1200px;
+    margin: 2rem auto;
+    padding: 1.5rem;
+}
+
+h1, h2, h3, h4 {
+    color: var(--accent-color);
+    margin-bottom: 0.5rem;
+}
+
+/* ========== CARD BOX ========== */
+.card {
+    background-color: var(--primary-color);
+    border-radius: var(--card-radius);
+    padding: 1.5rem;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+    margin-bottom: 2rem;
+    transition: transform var(--transition-speed);
+}
+
+.card:hover {
+    transform: translateY(-3px);
+}
+
+/* ========== KPI METRICS ========== */
+.kpi-container {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.kpi-box {
+    background-color: var(--secondary-color);
+    padding: 1rem 1.5rem;
+    border-radius: var(--card-radius);
+    flex: 1;
+    min-width: 200px;
+    text-align: center;
+}
+
+.kpi-title {
+    font-size: 1rem;
+    color: var(--muted-color);
+}
+
+.kpi-value {
+    font-size: 1.8rem;
+    font-weight: bold;
+    color: var(--highlight-color);
+}
+
+/* ========== CHARTS ========== */
+.chart-container {
+    background-color: var(--primary-color);
+    border-radius: var(--card-radius);
+    padding: 1rem;
+    margin-bottom: 2rem;
+}
+
+/* ========== TABLE ========== */
+.table-container {
+    overflow-x: auto;
+    background-color: var(--primary-color);
+    padding: 1rem;
+    border-radius: var(--card-radius);
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    color: var(--text-color);
+}
+
+th, td {
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid var(--secondary-color);
+}
+
+th {
+    color: var(--accent-color);
+}
+
+tr:hover {
+    background-color: var(--secondary-color);
+}
+
+/* ========== BUTTONS & FILTERS ========== */
+button, .filter-select {
+    background-color: var(--accent-color);
+    color: #fff;
+    border: none;
+    padding: 0.7rem 1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color var(--transition-speed);
+    font-size: 1rem;
+}
+
+button:hover, .filter-select:hover {
+    background-color: var(--highlight-color);
+}
+
+input[type="search"], select {
+    padding: 0.6rem;
+    border-radius: 8px;
+    border: 1px solid var(--secondary-color);
+    background-color: var(--secondary-color);
+    color: var(--text-color);
+    margin-right: 0.5rem;
+    font-size: 0.95rem;
+}
+
+/* ========== TABS ========== */
+.tab-container {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.tab {
+    background-color: var(--secondary-color);
+    padding: 0.6rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--muted-color);
+    transition: background-color var(--transition-speed);
+}
+
+.tab.active {
+    background-color: var(--accent-color);
+    color: white;
+}
+
+/* ========== FOOTER ========== */
+footer {
+    text-align: center;
+    color: var(--muted-color);
+    padding: 1rem 0;
+    font-size: 0.85rem;
+}
