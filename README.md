@@ -26,7 +26,7 @@ Membangun model regresi prediktif menggunakan dataset `flights.csv` dari Kaggle 
 ## Dataset
 
 - **Nama Dataset**: [2015 Flight Delays and Cancellations](https://www.kaggle.com/datasets/usdot/flight-delays?select=flights.csv)
-- **Ukuran**: ~375 MB
+- **Ukuran**: ~375 MB (`flights.csv` ~5,8 juta baris data)
 - **Format**: CSV (Terstruktur)
 - **Usability Score**: 10.0
 - **Deskripsi**: Dataset ini berisi catatan penerbangan domestik di Amerika Serikat sepanjang tahun 2015. Data mencakup informasi detail seperti maskapai, nomor penerbangan, bandara asal dan tujuan, waktu keberangkatan dan kedatangan, durasi keterlambatan, jarak, dan lainnya.
