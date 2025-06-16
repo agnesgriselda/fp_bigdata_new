@@ -14,6 +14,19 @@ MINIO_ACCESS_KEY = "minioadmin"
 MINIO_SECRET_KEY = "minioadmin"
 BUCKET_NAME = "processed-data"
 DATA_FILE_KEY = "cleaned_flight_data.csv"
+# ========================
+# KONFIGURASI STREAMLIT
+# ========================
+st.set_page_config(page_title="Flight Delay Dashboard", layout="wide", initial_sidebar_state="expanded")
+
+# ========================
+# KONFIGURASI MINIO
+# ========================
+MINIO_ENDPOINT = "http://localhost:9000"
+ACCESS_KEY = "minioadmin"
+SECRET_KEY = "minioadmin"
+BUCKET_NAME = "processed-data"
+FILE_NAME = "cleaned_flight_data.csv"
 
 @st.cache_data
 def load_data_from_minio():
@@ -36,6 +49,46 @@ def reverse_one_hot_encoding(df, prefix):
     if not encoded_columns: return None
     original_series = df[encoded_columns].idxmax(axis=1).apply(lambda x: x.replace(prefix, ''))
     return original_series
+    session = boto3.session.Session()
+    client = session.client(
+        service_name='s3',
+        endpoint_url=MINIO_ENDPOINT,
+        aws_access_key_id=ACCESS_KEY,
+        aws_secret_access_key=SECRET_KEY
+    )
+    response = client.get_object(Bucket=BUCKET_NAME, Key=FILE_NAME)
+    content = response['Body'].read().decode('utf-8')
+    df = pd.read_csv(StringIO(content))
+    return df
+
+# ========================
+# LOAD DATA
+# ========================
+df = load_data_from_minio()
+
+# ========================
+# SIDEBAR FILTER
+# ========================
+st.sidebar.header("Filter Data Penerbangan")
+airlines = df['airline'].unique().tolist()
+origins = df['origin'].unique().tolist()
+dests = df['dest'].unique().tolist()
+months = sorted(df['month'].dropna().unique().tolist())
+
+selected_airline = st.sidebar.selectbox("Pilih Maskapai", ['Semua'] + airlines)
+selected_origin = st.sidebar.selectbox("Bandara Asal", ['Semua'] + origins)
+selected_dest = st.sidebar.selectbox("Bandara Tujuan", ['Semua'] + dests)
+selected_month = st.sidebar.selectbox("Bulan", ['Semua'] + list(map(str, months)))
+
+filtered_df = df.copy()
+if selected_airline != 'Semua':
+    filtered_df = filtered_df[filtered_df['airline'] == selected_airline]
+if selected_origin != 'Semua':
+    filtered_df = filtered_df[filtered_df['origin'] == selected_origin]
+if selected_dest != 'Semua':
+    filtered_df = filtered_df[filtered_df['dest'] == selected_dest]
+if selected_month != 'Semua':
+    filtered_df = filtered_df[filtered_df['month'].astype(str) == selected_month]
 
 # =================================================================================
 # BAGIAN 2: FUNGSI STYLING KUSTOM (Disinilah "sihirnya")
