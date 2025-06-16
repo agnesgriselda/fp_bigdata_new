@@ -16,11 +16,10 @@ st.set_page_config(page_title="Flight Delay Dashboard", layout="wide", initial_s
 MINIO_ENDPOINT = "http://localhost:9000"
 ACCESS_KEY = "minioadmin"
 SECRET_KEY = "minioadmin"
-BUCKET_NAME = "raw-data"
-FILE_NAME = "flights.csv"
+BUCKET_NAME = "processed-data"
+FILE_NAME = "cleaned_flight_data.csv"
 
 @st.cache_data
-
 def load_data_from_minio():
     session = boto3.session.Session()
     client = session.client(
@@ -31,7 +30,8 @@ def load_data_from_minio():
     )
     response = client.get_object(Bucket=BUCKET_NAME, Key=FILE_NAME)
     content = response['Body'].read().decode('utf-8')
-    return pd.read_csv(StringIO(content))
+    df = pd.read_csv(StringIO(content))
+    return df
 
 # ========================
 # LOAD DATA
