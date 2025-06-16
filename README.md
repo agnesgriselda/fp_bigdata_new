@@ -455,11 +455,11 @@ fp-bigdata
         ![Screenshot 2025-06-16 013314](https://github.com/user-attachments/assets/79730ee2-3b01-40d4-a137-d69454497091)
 
 
-   # Langkah 5-6: Memproses Data dan Melatih Model (Machine Learning)
+### Langkah 5-6: Memproses Data dan Melatih Model (Machine Learning)
 
 Setelah data mentah berhasil dikumpulkan di bucket `raw-data` MinIO, langkah selanjutnya adalah memprosesnya menjadi dataset bersih dan membangun model prediktif berbasis Machine Learning.
 
-## Struktur Direktori
+#### Struktur Direktori
 ```
 fp-bigdata
 ├── api_service/
@@ -479,17 +479,17 @@ fp-bigdata
 │   └── train_model.py  (dan ini)
 ```
 
-## 1. Persiapan Data (prepare_data.py)
+### 1. Persiapan Data (prepare_data.py)
 
-### Lokasi:
+#### Lokasi:
 `machine_learning/prepare_data.py`
 
-### Fungsi:
+#### Fungsi:
 - Mengambil semua file JSON dari bucket `raw-data`.
 - Membersihkan data dan melakukan feature engineering.
 - Menyimpan hasil ke dalam bucket `processed-data` sebagai file `cleaned_insurance_data.csv`.
 
-### Jalankan Skrip:
+#### Jalankan Skrip:
 
 ```bash
 python machine_learning/prepare_data.py
@@ -499,36 +499,36 @@ python machine_learning/prepare_data.py
 ![Screenshot 2025-06-16 030540](https://github.com/user-attachments/assets/918e6571-12fd-4521-88e0-58d2043e0e7c)
 
 
-## 2. Train Model (train_model.py)
+### 2. Train Model (train_model.py)
 
-### Lokasi:
+#### Lokasi:
 `machine_learning/train_model.py`
 
-### Fungsi:
+#### Fungsi:
 - Mengambil `cleaned_insurance_data.csv` dari bucket processed-data.
 - Melatih model _RandomForestRegressor_ untuk memprediksi charges.
 - Menyimpan model hasil pelatihan `(insurance_model.pkl)` ke `bucket processed-data`.
 
-### Jalankan Skrip:
+#### Jalankan Skrip:
 
 ```bash
 python machine_learning/train_model.py
 ```
-## 3. Validasi Hasil
+### 3. Validasi Hasil
 
-### Buka MinIO Web UI
+#### Buka MinIO Web UI
 Akses antarmuka pengguna MinIO melalui browser: `http://localhost:9001`
 
-### Navigasi ke Bucket `processed-data`
+#### Navigasi ke Bucket `processed-data`
 Pastikan dua file berikut telah berhasil diunggah:
 
 - **`cleaned_insurance_data.csv`** — hasil *data cleaning* dan *feature engineering*
 - **`insurance_model.pkl`** — model Machine Learning yang telah dilatih dan disimpan dalam format pickle
 
-### Dokumentasi Tampilan:
+#### Dokumentasi Tampilan:
 #![Screenshot 2025-06-16 073632](https://github.com/user-attachments/assets/1244d176-b1e6-43af-9c43-93bed693c546)
 
-### Notes :
+#### _Notes_ :
 - Pastikan `producer.py` dan `consumer.py` telah selesai dijalankan sehingga data mentah tersedia di bucket `raw-data`.
 - Skrip `prepare_data.py` dan `train_model.py` menggunakan:
   - **MinIO SDK for Python** untuk komunikasi ke object storage
@@ -540,7 +540,7 @@ Pastikan dua file berikut telah berhasil diunggah:
   - *Encoding* kolom kategorikal (`sex`, `smoker`, `region`)
   - Normalisasi nama kolom agar konsisten
 
-### Evaluasi Model
+#### Evaluasi Model
 ![Screenshot 2025-06-16 072711](https://github.com/user-attachments/assets/22183e8a-50a4-4f60-a3d0-bc18272f2832)
 
 ---
