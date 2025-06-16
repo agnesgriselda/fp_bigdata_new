@@ -5,6 +5,7 @@ scikit-learn
 # Untuk Data Pipeline 
 kafka-python
 minio
+lz4
 
 # Untuk API Service 
 fastapi
@@ -13,3 +14,4 @@ uvicorn[standard]
 # Untuk Dashboard
 streamlit
 plotly
+boto3

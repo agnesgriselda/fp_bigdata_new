@@ -1,0 +1,17 @@
+# Virtual Environments
+venv/
+.venv/
+venv_fp_bigdata/
+
+# Abaikan semua dataset
+data_source/*
+!data_source/.gitkeep
+
+# File Python Cache & sementara
+__pycache__/
+*.pyc
+downloaded_model.pkl
+
+# File Sistem Operasi
+.DS_Store
+Thumbs.db
