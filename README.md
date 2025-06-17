@@ -545,3 +545,59 @@ Pastikan dua file berikut telah berhasil diunggah:
 
 ---
 
+## 🚀 Menjalankan Proyek dengan 1 Perintah
+
+Proyek ini dirancang untuk dijalankan sepenuhnya menggunakan Docker Compose. Seluruh alur kerja, dari data ingestion hingga layanan frontend, akan berjalan secara otomatis.
+
+### 1. Prasyarat
+
+-   **Docker & Docker Compose:** Pastikan keduanya sudah ter-install dan Docker Desktop (atau Engine) sedang berjalan.
+-   **Dataset:**
+    1.  Unduh dataset dari **[Kaggle: US Flight Delays and Cancellations](https://www.kaggle.com/datasets/usdot/flight-delays)**.
+    2.  Buat folder bernama `data_source` di direktori utama proyek.
+    3.  Letakkan file `flights.csv` yang sudah diunduh ke dalam folder `data_source/`.
+
+    > **Catatan:** Dataset tidak disertakan di repository ini karena ukurannya yang besar.
+
+### 2. Jalankan Proyek
+
+Buka terminal di direktori utama proyek, lalu jalankan satu perintah di bawah ini.
+Perintah `--build` akan memastikan semua kode terbaru dan dependensi di-install dengan benar.
+
+```bash
+docker-compose up --build
+```
+#### DOKUMENTASI 
+![image](https://github.com/user-attachments/assets/9dbbfb96-e772-4946-b332-ae8d96218d86)
+
+![image](https://github.com/user-attachments/assets/ad828c3b-9a9e-427b-9bc7-87942ec29a10)
+
+
+### 3. Akses Hasil Akhir
+
+Setelah terminal menampilkan log bahwa layanan Uvicorn dan Streamlit berjalan, buka browser dan akses:
+
+-   **Dashboard Analisis:**
+    -   ➡️ **`http://localhost:8501`**
+      
+![image](https://github.com/user-attachments/assets/bac660a2-56cf-42d1-a978-ef108c2ae881)
+
+
+-   **UI Prediktor:**
+    -   ➡️ Buka file **`frontend_ui/index.html`**
+    
+![image](https://github.com/user-attachments/assets/7710ef50-99ec-440b-9611-c10ac2c9b17a)
+
+
+---
+
+## 🛠️ Menghentikan Proyek
+
+Untuk menghentikan semua layanan, buka terminal baru di direktori proyek dan jalankan:
+```bash
+docker-compose down
+```
+Untuk menghapus juga data yang ada di MinIO, gunakan:
+```bash
+docker-compose down -v
+```
