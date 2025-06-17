@@ -1,17 +1,22 @@
-# Core Libraries untuk Data Processing & ML
+# Data Manipulation & ML
 pandas
 scikit-learn
+joblib
+numpy
 
-# Untuk Data Pipeline 
-kafka-python
+# Format Data & Konektor
+pyarrow
+boto3
 minio
+
+# Streaming
+kafka-python==2.0.2
 lz4
 
-# Untuk API Service 
+# API Service
 fastapi
 uvicorn[standard]
 
-# Untuk Dashboard
+# Dashboard & Visualisasi
 streamlit
 plotly
-boto3

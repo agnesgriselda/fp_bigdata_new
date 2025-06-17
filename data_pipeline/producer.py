@@ -1,34 +1,29 @@
+# data_pipeline/producer.py (Versi Final untuk Demo Cepat - 500k Record)
+
 import time
 import csv
 import json
 from kafka import KafkaProducer
 import os
 
-# Konfigurasi yang disesuaikan untuk dataset penerbangan
+# Konfigurasi
 KAFKA_BROKER = os.environ.get("KAFKA_BROKER", "localhost:9092")
 KAFKA_TOPIC = 'flight-data'
 CSV_FILE_PATH = 'data_source/flights.csv'
 
 def create_producer():
-    """Membuat dan mengembalikan instance KafkaProducer yang sudah di-tuning."""
+    """Membuat instance KafkaProducer yang sudah di-tuning untuk throughput tinggi."""
     print(f"Connecting to Kafka Broker at {KAFKA_BROKER}...")
     try:
-        # --- PERBAIKAN: TUNING KONFIGURASI PRODUCER UNTUK HIGH-THROUGHPUT ---
         producer = KafkaProducer(
             bootstrap_servers=[KAFKA_BROKER],
             value_serializer=lambda v: json.dumps(v).encode('utf-8'),
             api_version=(0, 10, 2),
-            # Ukuran batch (dalam byte). 64KB adalah nilai awal yang baik.
-            batch_size=65536,
-            # Waktu tunggu (ms) untuk mengumpulkan pesan sebelum mengirim batch.
-            linger_ms=5,
-            # Jenis kompresi. 'lz4' sangat cepat dan efisien.
-            compression_type='lz4',
-            # Buffer memori total untuk producer
-            buffer_memory=67108864, # 64 MB
+            batch_size=65536,       # 64KB
+            linger_ms=5,            # Tunggu 5ms
+            compression_type='lz4'
         )
-        # --------------------------------------------------------------------
-        print("Successfully connected to Kafka Broker with tuned configuration.")
+        print("Successfully connected to Kafka Broker.")
         return producer
     except Exception as e:
         print(f"Failed to connect to Kafka Broker: {e}")
@@ -36,16 +31,26 @@ def create_producer():
         return create_producer()
 
 def publish_data(producer, topic):
-    """Membaca data dari flights.csv dan mengirimkannya ke Kafka secepat mungkin."""
+    """Membaca data dari flights.csv, membatasinya, dan mengirimkannya ke Kafka."""
     print(f"Reading data from {CSV_FILE_PATH} and publishing to topic '{topic}'...")
+
+    # --- REVISI UTAMA: MEMBATASI JUMLAH DATA UNTUK DEMO ---
+    RECORD_LIMIT = 500000 
     
     try:
         with open(CSV_FILE_PATH, mode='r') as file:
             csv_reader = csv.DictReader(file)
             
-            print("Starting to send flight data in high-throughput mode...")
+            print(f"Starting to send up to {RECORD_LIMIT} flight data records...")
             start_time = time.time()
+            records_sent = 0
+
             for i, row in enumerate(csv_reader):
+                # Hentikan loop jika sudah mencapai limit
+                if records_sent >= RECORD_LIMIT:
+                    print(f"Reached record limit of {RECORD_LIMIT}. Stopping producer.")
+                    break
+                
                 try:
                     message = {
                         "YEAR": int(row.get("YEAR", 0)),
@@ -61,25 +66,23 @@ def publish_data(producer, topic):
                     }
                  
                     producer.send(topic, value=message)
+                    records_sent += 1
                     
-                    # --- PERBAIKAN: KURANGI FREKUENSI PRINT ---
-                    # Cetak status setiap 50,000 data agar tidak membanjiri terminal
-                    if (i + 1) % 50000 == 0:
-                        print(f"Sent {i + 1} records...")
+                    # Cetak status setiap 50,000 data
+                    if records_sent % 50000 == 0:
+                        print(f"Sent {records_sent} records...")
                  
-                except (ValueError, KeyError) as e:
-                    # Jangan print error untuk setiap baris, cukup hitung saja (opsional)
-                    # print(f"Skipping row due to data error: {row}. Error: {e}")
+                except (ValueError, KeyError):
                     continue
     except FileNotFoundError:
-        print(f"Error: File not found at {CSV_FILE_PATH}")
+        print(f"ERROR: File not found at {CSV_FILE_PATH}")
         return
  
-    print("Flushing final messages... (this might take a moment)")
+    print("Flushing final messages...")
     producer.flush()
     end_time = time.time()
-    print("All data has been sent.")
-    print(f"Total time taken: {end_time - start_time:.2f} seconds.")
+    print(f"All {records_sent} records have been sent.")
+    print(f"Total time taken for producing data: {end_time - start_time:.2f} seconds.")
 
 if __name__ == "__main__":
     kafka_producer = create_producer()

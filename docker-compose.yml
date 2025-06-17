@@ -1,51 +1,86 @@
-version: '3.8'
+# docker-compose.yml (Versi Final untuk Orkestrasi Penuh)
 
 services:
+  # 1. Zookeeper: Koordinator untuk Kafka
   zookeeper:
-    image: confluentinc/cp-zookeeper:7.0.1
-    container_name: zookeeper
+    image: confluentinc/cp-zookeeper:7.3.2
     hostname: zookeeper
-    ports:
-      - "2181:2181"
+    container_name: zookeeper
+    ports: ["2181:2181"]
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
 
-  # Kafka adalah platform streaming yang akan menerima data dari producer.
+  # 2. Kafka: Platform streaming untuk data penerbangan
   kafka:
-    image: confluentinc/cp-kafka:7.0.1
-    container_name: kafka
+    image: confluentinc/cp-kafka:7.3.2
     hostname: kafka
-    ports:
-      # Port 9092 diekspos ke host agar skrip Python (producer/consumer) bisa terhubung.
-      - "9092:9092"
-    depends_on:
-      - zookeeper
+    container_name: kafka
+    ports: ["9092:9092"]
+    depends_on: [zookeeper]
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
 
-  # MinIO berfungsi sebagai Data Lake untuk menyimpan data mentah, data olahan, dan model.
+  # 3. MinIO: Data Lake untuk menyimpan semua file
   minio:
-    image: minio/minio:RELEASE.2023-09-07T02-05-02Z
-    container_name: minio
+    image: minio/minio:latest
     hostname: minio
-    ports:
-      # Port 9000 untuk API access (digunakan oleh skrip Python).
-      - "9000:9000"
-      # Port 9001 untuk Web UI (diakses via browser).
-      - "9001:9001"
-    volumes:
-      - minio_data:/data
+    container_name: minio
+    # Menggunakan port standar. Jika error, ganti ke 9100:9000 dan 9101:9001
+    ports: ["9100:9000", "9101:9001"]
+    volumes: ["minio_data:/data"]
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     command: server /data --console-address ":9001"
 
-# Mendefinisikan volume yang akan digunakan oleh layanan MinIO.
+  # 4. App Runner: Otak orkestrasi yang menjalankan semua skrip Python
+  app_runner:
+    build: .
+    container_name: app_runner
+    depends_on: [kafka, minio]
+    environment:
+      # Variabel ini akan diambil oleh os.environ.get() di dalam skrip Python
+      - KAFKA_BROKER=kafka:29092
+      - MINIO_ENDPOINT=minio:9000
+    ports:
+      - "8000:8000" # Untuk API
+      - "8501:8501" # Untuk Dashboard
+    command:
+      # Menggunakan format multiline YAML yang lebih bersih dan andal
+      - "sh"
+      - "-c"
+      - |
+        # Tahap 0: Pastikan infrastruktur benar-benar siap
+        echo ">>> [TAHAP 0] Menunggu Infrastruktur..."
+        ./wait-for-kafka.sh
+        ./wait-for-minio.sh
+        echo "--- Infrastruktur SIAP! ---"
+        
+        # Tahap 1: Jalankan Pipa Data secara sekuensial
+        echo ">>> [TAHAP 1] Memulai Pipa Data..."
+        python data_pipeline/producer.py
+        python data_pipeline/consumer.py
+        echo "--- Pipa Data SELESAI ---"
+
+        # Tahap 2: Jalankan Proses Machine Learning
+        echo ">>> [TAHAP 2] Memulai Proses Machine Learning..."
+        python machine_learning/prepare_data.py
+        python machine_learning/train_model.py
+        echo "--- Proses Machine Learning SELESAI ---"
+
+        # Tahap 3: Jalankan Layanan Frontend secara paralel
+        echo ">>> [TAHAP 3] Menjalankan Layanan Antarmuka..."
+        echo "--> Dashboard berjalan di http://localhost:8501"
+        echo "--> API berjalan di http://localhost:8000"
+        streamlit run dashboard/app.py --server.port 8501 --server.address 0.0.0.0 &
+        uvicorn api_service.main:app --host 0.0.0.0 --port 8000
+
+# Mendefinisikan volume persisten untuk data MinIO
 volumes:
   minio_data:

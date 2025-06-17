@@ -1,3 +1,5 @@
+# data_pipeline/consumer.py (Versi Final dengan Batching & Auto Create Bucket)
+
 import json
 import os
 import time
@@ -6,16 +8,18 @@ from minio import Minio
 from minio.error import S3Error
 import io
 
-# --- Konfigurasi (Tidak ada perubahan) ---
+# --- Konfigurasi ---
 KAFKA_BROKER = os.environ.get("KAFKA_BROKER", "localhost:9092")
 KAFKA_TOPIC = 'flight-data'
 MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "localhost:9000")
-MINIO_ACCESS_KEY = os.environ.get("MINIO_ROOT_USER", "minioadmin")
-MINIO_SECRET_KEY = os.environ.get("MINIO_ROOT_PASSWORD", "minioadmin")
-MINIO_BUCKET_NAME = 'raw-data'
+MINIO_ACCESS_KEY = "minioadmin"
+MINIO_SECRET_KEY = "minioadmin"
 
-# --- UKURAN BATCH UNTUK DISIMPAN KE MINIO ---
-# Simpan data ke MinIO setiap 10,000 record terkumpul
+# Definisikan kedua nama bucket yang dibutuhkan oleh proyek
+RAW_BUCKET_NAME = 'raw-data'
+PROCESSED_BUCKET_NAME = 'processed-data'
+
+# Ukuran batch untuk disimpan ke MinIO
 BATCH_SIZE = 10000
 
 def create_kafka_consumer():
@@ -26,10 +30,10 @@ def create_kafka_consumer():
             KAFKA_TOPIC,
             bootstrap_servers=[KAFKA_BROKER],
             auto_offset_reset='earliest',
-            group_id='flight-data-consumer-group-batched', # Nama group baru untuk reset offset
+            group_id='flight-data-consumer-group-batched',
             value_deserializer=lambda x: json.loads(x.decode('utf-8')),
             api_version=(0, 10, 2),
-            # Ambil data dalam batch besar dari Kafka
+            consumer_timeout_ms=10000, # Tambahan: Berhenti jika tidak ada pesan selama 10 detik
             fetch_max_bytes=15728640, # 15MB
             max_poll_records=500,
         )
@@ -56,6 +60,22 @@ def create_minio_client():
         print(f"Failed to connect to MinIO: {e}")
         return None
 
+# --- REVISI UTAMA: FUNGSI UNTUK MEMBUAT BUCKET OTOMATIS ---
+def setup_minio_buckets(client):
+    """Memastikan semua bucket yang dibutuhkan oleh proyek sudah ada."""
+    buckets_to_create = [RAW_BUCKET_NAME, PROCESSED_BUCKET_NAME]
+    for bucket_name in buckets_to_create:
+        try:
+            if not client.bucket_exists(bucket_name):
+                client.make_bucket(bucket_name)
+                print(f"Bucket '{bucket_name}' created successfully.")
+            else:
+                print(f"Bucket '{bucket_name}' already exists.")
+        except S3Error as e:
+            print(f"Error setting up bucket '{bucket_name}': {e}")
+            return False
+    return True
+
 def consume_and_store_data():
     """Mengkonsumsi data dari Kafka dan menyimpannya ke MinIO dalam batch."""
     consumer = create_kafka_consumer()
@@ -64,48 +84,41 @@ def consume_and_store_data():
     if not consumer or not minio_client:
         return
 
+    # Panggil fungsi setup bucket sebelum memulai proses
+    if not setup_minio_buckets(minio_client):
+        print("Failed to setup MinIO buckets. Exiting.")
+        return
+
     print(f"Listening for messages on topic '{KAFKA_TOPIC}'...")
-    print(f"Will store data in batches of {BATCH_SIZE} records.")
+    print(f"Will store data in batches of {BATCH_SIZE} records to bucket '{RAW_BUCKET_NAME}'.")
     
-    # Inisialisasi list untuk menampung batch dan counter
     record_batch = []
     total_records_processed = 0
     start_time = time.time()
 
     try:
         for message in consumer:
-            # Tambahkan record ke batch
             record_batch.append(message.value)
             
-            # Jika ukuran batch sudah tercapai, proses dan simpan ke MinIO
             if len(record_batch) >= BATCH_SIZE:
-                # Buat nama file unik untuk batch ini
                 batch_file_name = f"batch_{int(time.time() * 1000)}.jsonl"
-                
-                # Gabungkan semua record JSON menjadi satu string dengan format JSON Lines
-                # (satu objek JSON per baris, dipisahkan oleh newline)
                 batch_data_str = '\n'.join(json.dumps(record) for record in record_batch)
-                
-                # Ubah string menjadi stream byte untuk diunggah
                 data_stream = io.BytesIO(batch_data_str.encode('utf-8'))
                 
                 try:
-                    # Unggah batch sebagai satu file ke MinIO
                     minio_client.put_object(
-                        MINIO_BUCKET_NAME,
+                        RAW_BUCKET_NAME,
                         batch_file_name,
                         data_stream,
                         len(batch_data_str),
-                        content_type='application/x-json-stream' # Tipe konten untuk JSON Lines
+                        content_type='application/x-json-stream'
                     )
                     
-                    # Update counter dan berikan status
                     processed_count = len(record_batch)
                     total_records_processed += processed_count
                     elapsed_time = time.time() - start_time
                     print(f"Uploaded batch '{batch_file_name}'. Processed {total_records_processed} records in {elapsed_time:.2f}s.")
 
-                    # Kosongkan batch untuk siklus berikutnya
                     record_batch = []
                     
                 except S3Error as e:
@@ -114,7 +127,6 @@ def consume_and_store_data():
     except KeyboardInterrupt:
         print("\nStopping consumer by user request...")
     finally:
-        # PENTING: Simpan sisa data di batch terakhir sebelum keluar
         if record_batch:
             print(f"Uploading final batch of {len(record_batch)} records...")
             batch_file_name = f"batch_{int(time.time() * 1000)}_final.jsonl"
@@ -122,11 +134,8 @@ def consume_and_store_data():
             data_stream = io.BytesIO(batch_data_str.encode('utf-8'))
             
             minio_client.put_object(
-                MINIO_BUCKET_NAME,
-                batch_file_name,
-                data_stream,
-                len(batch_data_str),
-                content_type='application/x-json-stream'
+                RAW_BUCKET_NAME, batch_file_name, data_stream,
+                len(batch_data_str), content_type='application/x-json-stream'
             )
             total_records_processed += len(record_batch)
 
