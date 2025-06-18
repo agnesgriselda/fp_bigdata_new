@@ -332,7 +332,7 @@ Pastikan dua file berikut telah berhasil diunggah:
 - **`insurance_model.pkl`** — model Machine Learning yang telah dilatih dan disimpan dalam format pickle
 
 #### Dokumentasi Tampilan:
-#![Screenshot 2025-06-16 073632](https://github.com/user-attachments/assets/1244d176-b1e6-43af-9c43-93bed693c546)
+![Screenshot 2025-06-16 073632](https://github.com/user-attachments/assets/1244d176-b1e6-43af-9c43-93bed693c546)
 
 #### _Notes_ :
 - Pastikan `producer.py` dan `consumer.py` telah selesai dijalankan sehingga data mentah tersedia di bucket `raw-data`.
@@ -343,7 +343,7 @@ Pastikan dua file berikut telah berhasil diunggah:
   - **pickle** untuk serialisasi model
 - Proses transformasi data mencakup:
   - *Handling missing values* (menghapus baris kosong)
-  - *Encoding* kolom kategorikal (`sex`, `smoker`, `region`)
+  - *Encoding* kolom kategorikal
   - Normalisasi nama kolom agar konsisten
 
 #### Evaluasi Model
