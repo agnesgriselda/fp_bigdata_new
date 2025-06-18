@@ -238,203 +238,9 @@ fp-bigdata
           ├── producer.py    
           └── consumer.py
    ```
-3. Kembangkan Producer (data_pipeline/producer.py)
-   ```
-   import time
-   import csv
-   import json
-   from kafka import KafkaProducer
-   import os
-
-   # Konfigurasi yang disesuaikan untuk dataset penerbangan
-   KAFKA_BROKER = os.environ.get("KAFKA_BROKER", "localhost:9092")
-   KAFKA_TOPIC = 'flight-data'  # <-- DIUBAH
-   CSV_FILE_PATH = 'data_source/flights.csv'  # <-- DIUBAH
-   SIMULATION_DELAY_SECONDS = 0.01  # <-- DIUBAH (agar lebih cepat)
-
-   def create_producer():
-       """Membuat dan mengembalikan instance KafkaProducer."""
-       print(f"Connecting to Kafka Broker at {KAFKA_BROKER}...")
-       try:
-           producer = KafkaProducer(
-               bootstrap_servers=[KAFKA_BROKER],
-               value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-               api_version=(0, 10, 2)
-           )
-           print("Successfully connected to Kafka Broker.")
-           return producer
-       except Exception as e:
-           print(f"Failed to connect to Kafka Broker: {e}")
-           time.sleep(5)
-           return create_producer()
-
-   def publish_data(producer, topic):
-       """Membaca data dari flights.csv dan mengirimkannya ke Kafka."""
-       print(f"Reading data from {CSV_FILE_PATH} and publishing to topic '{topic}'...")
- 
-       try:
-           with open(CSV_FILE_PATH, mode='r') as file:
-               # Menggunakan DictReader untuk kemudahan akses kolom berdasarkan nama
-               csv_reader = csv.DictReader(file)
-            
-               print("Starting to send flight data...")
-               for i, row in enumerate(csv_reader):
-                   try:
-                       message = {
-                           "YEAR": int(row.get("YEAR", 0)),
-                           "MONTH": int(row.get("MONTH", 0)),
-                           "DAY": int(row.get("DAY", 0)),
-                           "AIRLINE": row.get("AIRLINE", ""),
-                           "FLIGHT_NUMBER": int(row.get("FLIGHT_NUMBER", 0)),
-                           "ORIGIN_AIRPORT": row.get("ORIGIN_AIRPORT", ""),
-                           "DESTINATION_AIRPORT": row.get("DESTINATION_AIRPORT", ""),
-                           "DEPARTURE_DELAY": float(row.get("DEPARTURE_DELAY") or 0),
-                           "ARRIVAL_DELAY": float(row.get("ARRIVAL_DELAY") or 0),
-                           "DISTANCE": int(row.get("DISTANCE", 0))
-                       }
-                 
-                       producer.send(topic, value=message)
-                    
-                       # Print status setiap 1000 data agar tidak membanjiri terminal
-                       if (i + 1) % 1000 == 0:
-                           print(f"Sent {i + 1} records...")
-                 
-                       time.sleep(SIMULATION_DELAY_SECONDS)
-                 
-                   except (ValueError, KeyError) as e:
-                       print(f"Skipping row due to data error: {row}. Error: {e}")
-                       continue
-       except FileNotFoundError:
-           print(f"Error: File not found at {CSV_FILE_PATH}")
-           return
- 
-       producer.flush()
-       print("All data has been sent.")
-
-   if __name__ == "__main__":
-       kafka_producer = create_producer()
-       if kafka_producer:
-           publish_data(kafka_producer, KAFKA_TOPIC)
-           kafka_producer.close()
-           print("Producer has been closed.")
-   ```
+2. Kembangkan Producer (data_pipeline/producer.py)
    
 3. Kembangkan Consumer (data_pipeline/consumer.py)
-   ```
-   import json
-   import os
-   import time
-   from kafka import KafkaConsumer
-   from minio import Minio
-   from minio.error import S3Error
-   import io
-
-   # Konfigurasi Kafka
-   KAFKA_BROKER = os.environ.get("KAFKA_BROKER", "localhost:9092")
-   KAFKA_TOPIC = 'flight-data'  # <-- DIUBAH
-
-   # Konfigurasi MinIO (Port 9000 untuk API, 9001 untuk Web UI)
-   MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "localhost:9000")
-   MINIO_ACCESS_KEY = os.environ.get("MINIO_ROOT_USER", "minioadmin")
-   MINIO_SECRET_KEY = os.environ.get("MINIO_ROOT_PASSWORD", "minioadmin")
-   MINIO_BUCKET_NAME = 'raw-data'
-
-   def create_kafka_consumer():
-       """Membuat dan mengembalikan instance KafkaConsumer."""
-       print(f"Connecting to Kafka Broker at {KAFKA_BROKER}...")
-       try:
-           consumer = KafkaConsumer(
-               KAFKA_TOPIC,
-               bootstrap_servers=[KAFKA_BROKER],
-               auto_offset_reset='earliest',
-               group_id='flight-data-consumer-group', # <-- Group ID diubah agar sesuai konteks
-               value_deserializer=lambda x: json.loads(x.decode('utf-8')),
-               api_version=(0, 10, 2)
-           )
-           print("Successfully connected to Kafka Broker.")
-           return consumer
-       except Exception as e:
-           print(f"Failed to connect to Kafka: {e}")
-           time.sleep(5)
-           return create_kafka_consumer()
-
-   def create_minio_client():
-       """Membuat dan mengembalikan instance MinIO client."""
-       print(f"Connecting to MinIO at {MINIO_ENDPOINT}...")
-       try:
-           client = Minio(
-               MINIO_ENDPOINT,
-               access_key=MINIO_ACCESS_KEY,
-               secret_key=MINIO_SECRET_KEY,
-               secure=False
-           )
-           print("Successfully connected to MinIO.")
-           return client
-       except Exception as e:
-           print(f"Failed to connect to MinIO: {e}")
-           return None
-
-   def setup_minio_bucket(client, bucket_name):
-       """Memastikan bucket di MinIO sudah ada, jika tidak, maka dibuat."""
-       try:
-           found = client.bucket_exists(bucket_name)
-           if not found:
-               client.make_bucket(bucket_name)
-               print(f"Bucket '{bucket_name}' created.")
-           else:
-               print(f"Bucket '{bucket_name}' already exists.")
-       except S3Error as e:
-           print(f"Error checking or creating bucket: {e}")
-           return False
-       return True
-
-   def consume_and_store_data():
-       """Mengkonsumsi data dari Kafka dan menyimpannya ke MinIO."""
-       consumer = create_kafka_consumer()
-       minio_client = create_minio_client()
-
-       if not consumer or not minio_client:
-           print("Could not initialize Kafka Consumer or MinIO Client. Exiting.")
-           return
-
-       if not setup_minio_bucket(minio_client, MINIO_BUCKET_NAME):
-           print(f"Failed to setup MinIO bucket '{MINIO_BUCKET_NAME}'. Exiting.")
-           return
-
-       print(f"Listening for messages on topic '{KAFKA_TOPIC}'...")
-       try:
-           for message in consumer:
-               data = message.value
-               print(f"Received flight data for flight: {data.get('FLIGHT_NUMBER')}")
-
-               timestamp_ms = int(time.time() * 1000)
-               flight_number = data.get('FLIGHT_NUMBER', 'UNKNOWN')
-               file_name = f"flight_{flight_number}_{timestamp_ms}.json"
-
-               json_data = json.dumps(data, indent=4).encode('utf-8')
-               json_stream = io.BytesIO(json_data)
-
-               try:
-                   minio_client.put_object(
-                       MINIO_BUCKET_NAME,
-                       file_name,
-                       json_stream,
-                       len(json_data),
-                       content_type='application/json'
-                   )
-                   print(f"Successfully uploaded {file_name} to bucket '{MINIO_BUCKET_NAME}'")
-               except S3Error as e:
-                   print(f"Error uploading to MinIO: {e}")
-
-       except KeyboardInterrupt:
-           print("Stopping consumer...")
-       finally:
-           consumer.close()
-           print("Consumer has been closed.")
-
-   if __name__ == "__main__":
-       consume_and_store_data()
-   ```
 
    ### Langkah 4: Eksekusi dan Validasi
    Jalankan pipeline
@@ -545,7 +351,7 @@ Pastikan dua file berikut telah berhasil diunggah:
 
 ---
 
-## 🚀 Menjalankan Proyek dengan 1 Perintah
+## 🚀 Menjalankan Proyek dengan 1 command
 
 Proyek ini dirancang untuk dijalankan sepenuhnya menggunakan Docker Compose. Seluruh alur kerja, dari data ingestion hingga layanan frontend, akan berjalan secara otomatis.
 
@@ -578,13 +384,13 @@ docker-compose up --build
 Setelah terminal menampilkan log bahwa layanan Uvicorn dan Streamlit berjalan, buka browser dan akses:
 
 -   **Dashboard Analisis:**
-    -   ➡️ **`http://localhost:8501`**
+    -  **`http://localhost:8501`**
       
 ![image](https://github.com/user-attachments/assets/bac660a2-56cf-42d1-a978-ef108c2ae881)
 
 
 -   **UI Prediktor:**
-    -   ➡️ Buka file **`frontend_ui/index.html`**
+    -  Buka file **`frontend_ui/index.html`**
     
 ![image](https://github.com/user-attachments/assets/7710ef50-99ec-440b-9611-c10ac2c9b17a)
 
