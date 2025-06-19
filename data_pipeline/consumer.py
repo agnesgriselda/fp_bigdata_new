@@ -1,5 +1,3 @@
-# data_pipeline/consumer.py (Versi Final dengan Batching & Auto Create Bucket)
-
 import json
 import os
 import time
@@ -10,34 +8,34 @@ import io
 
 # --- Konfigurasi ---
 KAFKA_BROKER = os.environ.get("KAFKA_BROKER", "localhost:9092")
-KAFKA_TOPIC = 'flight-data'
 MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "localhost:9000")
 MINIO_ACCESS_KEY = "minioadmin"
 MINIO_SECRET_KEY = "minioadmin"
 
-# Definisikan kedua nama bucket yang dibutuhkan oleh proyek
-RAW_BUCKET_NAME = 'raw-data'
-PROCESSED_BUCKET_NAME = 'processed-data'
+# MODIFIKASI: Definisikan topic dan bucket untuk kedua jenis data
+FLIGHT_TOPIC = 'flight-data'
+REVIEW_TOPIC = 'flight-reviews'
 
-# Ukuran batch untuk disimpan ke MinIO
-BATCH_SIZE = 10000
+FLIGHT_BUCKET_NAME = 'raw-data'
+REVIEW_BUCKET_NAME = 'unstructured-raw-data'
+
+# Ukuran batch bisa di-tuning per jenis data jika perlu
+FLIGHT_BATCH_SIZE = 10000
+REVIEW_BATCH_SIZE = 100 
 
 def create_kafka_consumer():
-    """Membuat dan mengembalikan instance KafkaConsumer yang sudah di-tuning."""
+    """Membuat KafkaConsumer yang mendengarkan DUA topic sekaligus."""
     print(f"Connecting to Kafka Broker at {KAFKA_BROKER}...")
     try:
         consumer = KafkaConsumer(
-            KAFKA_TOPIC,
+            FLIGHT_TOPIC, REVIEW_TOPIC, # MODIFIKASI UTAMA: Langganan ke dua topic
             bootstrap_servers=[KAFKA_BROKER],
             auto_offset_reset='earliest',
-            group_id='flight-data-consumer-group-batched',
+            group_id='unified-consumer-group-batched', # Group ID untuk semua data
             value_deserializer=lambda x: json.loads(x.decode('utf-8')),
-            api_version=(0, 10, 2),
-            consumer_timeout_ms=10000, # Tambahan: Berhenti jika tidak ada pesan selama 10 detik
-            fetch_max_bytes=15728640, # 15MB
-            max_poll_records=500,
+            consumer_timeout_ms=30000, # Waktu tunggu lebih lama (30 detik)
         )
-        print("Successfully connected to Kafka Broker.")
+        print(f"Successfully connected to Kafka. Listening on topics: {FLIGHT_TOPIC}, {REVIEW_TOPIC}")
         return consumer
     except Exception as e:
         print(f"Failed to connect to Kafka: {e}")
@@ -45,25 +43,20 @@ def create_kafka_consumer():
         return create_kafka_consumer()
 
 def create_minio_client():
-    """Membuat dan mengembalikan instance MinIO client."""
+    """Membuat instance MinIO client."""
     print(f"Connecting to MinIO at {MINIO_ENDPOINT}...")
     try:
-        client = Minio(
-            MINIO_ENDPOINT,
-            access_key=MINIO_ACCESS_KEY,
-            secret_key=MINIO_SECRET_KEY,
-            secure=False
-        )
+        client = Minio(MINIO_ENDPOINT, access_key=MINIO_ACCESS_KEY, secret_key=MINIO_SECRET_KEY, secure=False)
         print("Successfully connected to MinIO.")
         return client
     except Exception as e:
         print(f"Failed to connect to MinIO: {e}")
         return None
 
-# --- REVISI UTAMA: FUNGSI UNTUK MEMBUAT BUCKET OTOMATIS ---
 def setup_minio_buckets(client):
-    """Memastikan semua bucket yang dibutuhkan oleh proyek sudah ada."""
-    buckets_to_create = [RAW_BUCKET_NAME, PROCESSED_BUCKET_NAME]
+    """Memastikan semua bucket yang dibutuhkan (termasuk untuk data unstruktur) sudah ada."""
+    # MODIFIKASI: Tambahkan bucket baru ke daftar
+    buckets_to_create = [FLIGHT_BUCKET_NAME, REVIEW_BUCKET_NAME, 'processed-data']
     for bucket_name in buckets_to_create:
         try:
             if not client.bucket_exists(bucket_name):
@@ -76,72 +69,77 @@ def setup_minio_buckets(client):
             return False
     return True
 
+def upload_batch_to_minio(client, bucket, batch_data, file_prefix):
+    """Helper function untuk meng-upload batch ke MinIO."""
+    if not batch_data:
+        return 0
+    
+    batch_file_name = f"{file_prefix}_batch_{int(time.time() * 1000)}.jsonl"
+    batch_data_str = '\n'.join(json.dumps(record) for record in batch_data)
+    data_stream = io.BytesIO(batch_data_str.encode('utf-8'))
+    
+    try:
+        client.put_object(
+            bucket, batch_file_name, data_stream, len(batch_data_str),
+            content_type='application/x-json-stream'
+        )
+        return len(batch_data)
+    except S3Error as e:
+        print(f"Error uploading batch '{batch_file_name}' to MinIO: {e}")
+        return 0
+
 def consume_and_store_data():
-    """Mengkonsumsi data dari Kafka dan menyimpannya ke MinIO dalam batch."""
+    """Mengkonsumsi data dari berbagai topic dan menyimpannya ke MinIO yang sesuai."""
     consumer = create_kafka_consumer()
     minio_client = create_minio_client()
 
-    if not consumer or not minio_client:
+    if not consumer or not minio_client or not setup_minio_buckets(minio_client):
+        print("Initialization failed. Exiting.")
         return
 
-    # Panggil fungsi setup bucket sebelum memulai proses
-    if not setup_minio_buckets(minio_client):
-        print("Failed to setup MinIO buckets. Exiting.")
-        return
-
-    print(f"Listening for messages on topic '{KAFKA_TOPIC}'...")
-    print(f"Will store data in batches of {BATCH_SIZE} records to bucket '{RAW_BUCKET_NAME}'.")
-    
-    record_batch = []
-    total_records_processed = 0
+    # MODIFIKASI: Buat batch terpisah untuk setiap jenis data
+    flight_batch, review_batch = [], []
+    total_flights, total_reviews = 0, 0
     start_time = time.time()
 
     try:
         for message in consumer:
-            record_batch.append(message.value)
-            
-            if len(record_batch) >= BATCH_SIZE:
-                batch_file_name = f"batch_{int(time.time() * 1000)}.jsonl"
-                batch_data_str = '\n'.join(json.dumps(record) for record in record_batch)
-                data_stream = io.BytesIO(batch_data_str.encode('utf-8'))
-                
-                try:
-                    minio_client.put_object(
-                        RAW_BUCKET_NAME,
-                        batch_file_name,
-                        data_stream,
-                        len(batch_data_str),
-                        content_type='application/x-json-stream'
-                    )
-                    
-                    processed_count = len(record_batch)
-                    total_records_processed += processed_count
-                    elapsed_time = time.time() - start_time
-                    print(f"Uploaded batch '{batch_file_name}'. Processed {total_records_processed} records in {elapsed_time:.2f}s.")
+            # MODIFIKASI UTAMA: Arahkan data berdasarkan topic
+            if message.topic == FLIGHT_TOPIC:
+                flight_batch.append(message.value)
+            elif message.topic == REVIEW_TOPIC:
+                review_batch.append(message.value)
 
-                    record_batch = []
-                    
-                except S3Error as e:
-                    print(f"Error uploading batch to MinIO: {e}")
+            # Cek dan upload batch data penerbangan jika sudah penuh
+            if len(flight_batch) >= FLIGHT_BATCH_SIZE:
+                count = upload_batch_to_minio(minio_client, FLIGHT_BUCKET_NAME, flight_batch, "flights")
+                total_flights += count
+                print(f"Uploaded FLIGHT batch. Total flights processed: {total_flights}")
+                flight_batch = []
+
+            # Cek dan upload batch data ulasan jika sudah penuh
+            if len(review_batch) >= REVIEW_BATCH_SIZE:
+                count = upload_batch_to_minio(minio_client, REVIEW_BUCKET_NAME, review_batch, "reviews")
+                total_reviews += count
+                print(f"Uploaded REVIEW batch. Total reviews processed: {total_reviews}")
+                review_batch = []
 
     except KeyboardInterrupt:
         print("\nStopping consumer by user request...")
     finally:
-        if record_batch:
-            print(f"Uploading final batch of {len(record_batch)} records...")
-            batch_file_name = f"batch_{int(time.time() * 1000)}_final.jsonl"
-            batch_data_str = '\n'.join(json.dumps(record) for record in record_batch)
-            data_stream = io.BytesIO(batch_data_str.encode('utf-8'))
-            
-            minio_client.put_object(
-                RAW_BUCKET_NAME, batch_file_name, data_stream,
-                len(batch_data_str), content_type='application/x-json-stream'
-            )
-            total_records_processed += len(record_batch)
+        print("Uploading final batches...")
+        # Upload sisa batch yang ada
+        if flight_batch:
+            count = upload_batch_to_minio(minio_client, FLIGHT_BUCKET_NAME, flight_batch, "flights_final")
+            total_flights += count
+        if review_batch:
+            count = upload_batch_to_minio(minio_client, REVIEW_BUCKET_NAME, review_batch, "reviews_final")
+            total_reviews += count
 
         consumer.close()
         print("Consumer has been closed.")
-        print(f"Total records processed and stored: {total_records_processed}")
+        print(f"Total records processed: {total_flights} flights, {total_reviews} reviews.")
+        print(f"Total time taken for consuming: {time.time() - start_time:.2f} seconds.")
 
 if __name__ == "__main__":
     consume_and_store_data()
