@@ -260,6 +260,15 @@ fp-bigdata
         ```
         ![Screenshot 2025-06-16 013314](https://github.com/user-attachments/assets/79730ee2-3b01-40d4-a137-d69454497091)
 
+#### Menambahkan Variety Data
+file dengan type `unstructured` format .txt kami tambahkan ke data_source untuk memastikan proses stream data dari producer-consumer berjalan dengan benar.
+
+![Screenshot 2025-06-18 231044](https://github.com/user-attachments/assets/588e38e6-b72f-4a14-abf0-3e6031c97c6d)
+
+![Screenshot 2025-06-18 232033](https://github.com/user-attachments/assets/a7cb0900-4d27-4abb-a248-124b5996730b)
+
+![Screenshot 2025-06-18 232111](https://github.com/user-attachments/assets/a649a1ed-bd65-4692-b069-571b99defff5)
+
 
 ### Langkah 5-6: Memproses Data dan Melatih Model (Machine Learning)
 
