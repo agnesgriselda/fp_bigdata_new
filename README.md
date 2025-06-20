@@ -9,19 +9,18 @@
 | 3  | Rafika Az Zahra Kusumastuti   | 5025231050  |
 | 4  | Nisrina Atiqah Dwiputri R     | 5025231075  |
 
-# Prediksi Keterlambatan Penerbangan dengan Machine Learning
+# Analisis Penerbangan: Prediksi Keterlambatan & Sentimen Pelanggan
 
 ## Deskripsi Masalah
-Keterlambatan penerbangan adalah masalah kritis dalam industri aviasi yang menyebabkan kerugian finansial bagi maskapai, menurunkan tingkat kepuasan pelanggan, dan mengganggu efisiensi operasional bandara. Kemampuan untuk memprediksi potensi keterlambatan secara akurat dapat membantu para pemangku kepentingan untuk mengambil tindakan mitigasi, seperti penyesuaian jadwal, alokasi sumber daya yang lebih baik, dan komunikasi proaktif kepada penumpang.
 
-Dengan memanfaatkan data historis penerbangan yang masif, kita dapat membangun model prediktif untuk mengidentifikasi pola dan faktor-faktor utama yang berkontribusi terhadap keterlambatan.
+Keterlambatan penerbangan adalah masalah kritis dalam industri aviasi yang berdampak pada finansial maskapai dan kepuasan pelanggan. Proyek ini bertujuan untuk membangun sebuah pipeline data end-to-end yang tidak hanya mampu memprediksi keterlambatan penerbangan menggunakan data terstruktur, tetapi juga menganalisis sentimen pelanggan dari ulasan teks tidak terstruktur. Dengan menggabungkan kedua analisis ini, pemangku kepentingan dapat memperoleh gambaran yang lebih holistik tentang performa operasional dan persepsi publik.
 
 ## Tujuan Proyek
 
-Membangun model regresi prediktif menggunakan dataset `flights.csv` dari Kaggle untuk:
-- Memprediksi durasi keterlambatan kedatangan (ARRIVAL_DELAY) sebuah penerbangan dalam satuan menit.
-- Menganalisis kontribusi variabel seperti keterlambatan keberangkatan, jarak tempuh, maskapai, dan waktu penerbangan terhadap potensi keterlambatan.
-- Menyajikan hasil analisis dalam bentuk dashboard interaktif yang dapat diakses oleh pengambil keputusan di industri penerbangan.
+- Membangun pipeline data streaming menggunakan **Apache Kafka** dan **MinIO** untuk menangani data terstruktur (detail penerbangan) dan tidak terstruktur (ulasan pelanggan).
+- Mengimplementasikan proses ETL dan pelatihan model machine learning secara terdistribusi menggunakan **Apache Spark (PySpark)** untuk memprediksi durasi keterlambatan.
+- Mengembangkan pipeline analisis sentimen untuk mengkategorikan ulasan pelanggan menjadi positif, negatif, atau netral.
+- Menyajikan seluruh wawasan dalam sebuah dashboard interaktif yang dibangun dengan **Streamlit**.
 
 ## Dataset
 
@@ -49,10 +48,11 @@ Pendekatan data lakehouse yang fleksibel sangat sesuai untuk menangani volume da
 
 | Komponen     | Deskripsi |
 |--------------|-----------|
-| **Apache Kafka** | Mensimulasikan aliran data penerbangan secara real-time, seolah-olah data diterima langsung dari sistem bandara. |
-| **MinIO** | Berfungsi sebagai Data Lake untuk menyimpan data mentah (JSON), data bersih (CSV), dan model terlatih (.pkl). |
-| **Python** | Digunakan untuk seluruh pipeline: Kafka producer & consumer, ETL, dan pelatihan model regresi dengan `pandas` dan `scikit-learn`. |
-| **Streamlit** | Dashboard interaktif untuk prediksi keterlambatan dan visualisasi faktor penyebabnya. |
+| **Apache Kafka** | Mensimulasikan aliran data penerbangan dan ulasan secara *real-time*. |
+| **MinIO** | Berfungsi sebagai Data Lake untuk menyimpan data mentah (JSON Lines) dan data yang telah diproses (Delta Lake, Parquet).|
+| **PySpark** | Digunakan untuk ETL dan pelatihan model prediksi keterlambatan secara terdistribusi, menunjukkan skalabilitas untuk data besar.|
+| **Python** | Digunakan untuk data streaming (Kafka), analisis sentimen (VADER), dan sebagai bahasa utama proyek. |
+| **Streamlit** | Membangun dashboard interaktif untuk menampilkan wawasan dari model PySpark dan hasil analisis sentimen. |
 | **FastAPI** *(opsional)* | API ringan untuk menyajikan model secara programatis agar dapat digunakan oleh sistem lain. |
 
 ## Alur Kerja
@@ -93,9 +93,9 @@ Pendekatan data lakehouse yang fleksibel sangat sesuai untuk menangani volume da
 |-----------------------|------------------------------------------------|
 | **Containerization**  | Docker, Docker Compose                         |
 | **Data Streaming**    | Apache Kafka                                   |
-| **Data Lake Storage** | MinIO                                          |
-| **Backend & ML**      | Python                                         |
-| **Library Python**    | Pandas, Scikit-learn, Kafka-Python, MinIO      |
+| **Data Lake Storage** | MinIO, Delta Lake                              |
+| **Backend & ML**      | Apache Spark (PySpark), MLlib                  |
+| **Library Python**    | Kafka-Python, MinIO, VaderSentiment            |
 | **API Service**       | FastAPI, Uvicorn                               |
 | **Dashboard**         | Streamlit                                      |
 | **Frontend**          | HTML, CSS, JavaScript                          |
@@ -111,13 +111,15 @@ fp-bigdata
 │   ├── consumer.py
 │   └── producer.py
 ├── data_source/
-│   └── flight.csv
+│   └── flights.csv
+│   └── consumer_reviews.txt
 ├── frontend_ui/
 │   ├── index.html
 │   └── script.js
 ├── machine_learning/
-│   ├── prepare_data.py
-│   └── train_model.py
+│   ├── prepare_data_spark.py
+│   └── train_model_spark.py
+│   └── analyze_sentiment.py
 ├── .gitignore
 ├── docker-compose.yml
 ├── README.md
@@ -130,23 +132,6 @@ fp-bigdata
 ### Langkah 1: Persiapan Lingkungan Awal (Setup)
 1. Buat File requirements.txt
    Buat file baru bernama requirements.txt di direktori utama proyek dan isi dengan semua library Python yang dibutuhkan oleh seluruh tim:
-   ```
-   # Core Libraries untuk Data Processing & ML
-   pandas
-   scikit-learn
-
-   # Untuk Data Pipeline 
-   kafka-python
-   minio
-
-   # Untuk API Service 
-   fastapi
-   uvicorn[standard]
-
-   # Untuk Dashboard
-   streamlit
-   plotly
-   ```
    Setelah file dibuat, instal semua library dengan menjalankan:
    ```
    pip install -r requirements.txt
@@ -154,66 +139,7 @@ fp-bigdata
 
 2. Buat File docker-compose.yml
    Buat file baru bernama docker-compose.yml. File ini akan menjalankan infrastruktur yang Anda butuhkan (Kafka & MinIO).
-   ```
-   version: '3.8'
-
-   services:
-     # Zookeeper adalah prasyarat wajib untuk Kafka.
-     # Kafka menggunakannya untuk mengelola konfigurasi, sinkronisasi, dan state cluster.
-     zookeeper:
-       image: confluentinc/cp-zookeeper:7.0.1
-       container_name: zookeeper
-       hostname: zookeeper
-       ports:
-         - "2181:2181"
-       environment:
-         ZOOKEEPER_CLIENT_PORT: 2181
-         ZOOKEEPER_TICK_TIME: 2000
-
-     # Kafka adalah platform streaming yang akan menerima data dari producer.
-     kafka:
-       image: confluentinc/cp-kafka:7.0.1
-       container_name: kafka
-       hostname: kafka
-       ports:
-         # Port 9092 diekspos ke host agar skrip Python (producer/consumer) bisa terhubung.
-         - "9092:9092"
-       depends_on:
-         - zookeeper
-       environment:
-         KAFKA_BROKER_ID: 1
-         KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
-         # Konfigurasi listener ini krusial agar Kafka bisa diakses dari luar container (localhost).
-         KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
-         KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-         KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-         KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-
-     # MinIO berfungsi sebagai Data Lake untuk menyimpan data mentah, data olahan, dan model.
-     minio:
-       image: minio/minio:RELEASE.2023-09-07T02-05-02Z
-       container_name: minio
-       hostname: minio
-       ports:
-         # Port 9000 untuk API access (digunakan oleh skrip Python).
-         - "9000:9000"
-         # Port 9001 untuk Web UI (diakses via browser).
-         - "9001:9001"
-       volumes:
-         # 'minio_data' adalah volume yang akan menyimpan data secara permanen.
-         # Jika container dihapus, data di volume ini tidak akan hilang.
-         - minio_data:/data
-       environment:
-         # Kredensial untuk login ke MinIO. JANGAN gunakan ini di lingkungan produksi.
-         MINIO_ROOT_USER: minioadmin
-         MINIO_ROOT_PASSWORD: minioadmin
-       command: server /data --console-address ":9001"
-
-   # Mendefinisikan volume yang akan digunakan oleh layanan MinIO.
-   volumes:
-     minio_data:
-   ```
-
+ 
 ### Langkah 2:  Menjalankan dan Mengkonfigurasi Infrastruktur
 1. Jalankan Layanan Docker
    ```
@@ -229,6 +155,7 @@ fp-bigdata
    - Penting: Buat dua bucket baru melalui UI. Anda akan menggunakan raw-data sebagai tujuan.
       - raw-data
       - processed-data
+      - unstructured-raw-data
 
 ### Langkah 3: Mengembangkan Pipa Data
 1. Lokasi dan Pembuatan File
@@ -239,7 +166,6 @@ fp-bigdata
           └── consumer.py
    ```
 2. Kembangkan Producer (data_pipeline/producer.py)
-   
 3. Kembangkan Consumer (data_pipeline/consumer.py)
 
    ### Langkah 4: Eksekusi dan Validasi
@@ -285,46 +211,47 @@ fp-bigdata
 │   ├── consumer.py
 │   └── producer.py
 ├── data_source/
-│   └── insurance.csv
+│   └── flights.csv
+│   └── consumer_reviews.txt
 ├── frontend_ui/
 │   ├── index.html
 │   └── script.js
 ├── machine_learning/
-│   ├── prepare_data.py (kita isi bagian ini)
-│   └── train_model.py  (dan ini)
+│   ├── prepare_data_spark.py (kita isi bagian ini)
+│   └── train_model_spark.py  (dan ini)
 │   └── analyze_sentiment.py  (dan ini)
 ```
 
 ### 1. Persiapan Data (prepare_data.py)
 
 #### Lokasi:
-`machine_learning/prepare_data.py`
+`machine_learning/prepare_data_spark.py`
 
 #### Fungsi:
 - Mengambil semua file JSON dari bucket `raw-data`.
 - Membersihkan data dan melakukan feature engineering.
-- Menyimpan hasil ke dalam bucket `processed-data` sebagai file `cleaned_insurance_data.csv`.
+- Menyimpan hasil ke dalam bucket `processed-data` sebagai file `cleaned_flight_data_delta`.
 
 #### Jalankan Skrip:
 
 ```bash
-python machine_learning/prepare_data.py
+python machine_learning/prepare_data_spark.py
 ```
-![Screenshot 2025-06-16 030540](https://github.com/user-attachments/assets/918e6571-12fd-4521-88e0-58d2043e0e7c)
 
+![Screenshot 2025-06-20 150312](https://github.com/user-attachments/assets/7c699b17-b58c-4ba4-a6b6-75ac94252735)
 
-### 2. Train Model (train_model.py & analyze_sentiment.py)
+### 2. Train Model (train_model_spark.py & analyze_sentiment.py)
 
 #### Lokasi:
-`machine_learning/train_model.py`  `machine_learning/analyze_sentiment.py`
+`machine_learning/train_model_spark.py`  `machine_learning/analyze_sentiment.py`
 
 #### Jalankan Skrip:
 
 ```bash
-python machine_learning/train_model.py
+python machine_learning/train_model_spark.py
 ```
-![Screenshot 2025-06-20 115745](https://github.com/user-attachments/assets/d4d2d4a1-c9a4-48c3-8793-360a2ba4127c)
 
+![Screenshot 2025-06-20 150821](https://github.com/user-attachments/assets/3bc38971-cb5a-43fe-bcd2-c05489e4a12f)
 
 ```bash
 python machine_learning/analyze_sentiment.py
@@ -340,27 +267,21 @@ Akses antarmuka pengguna MinIO melalui browser: `http://localhost:9001`
 #### Navigasi ke Bucket `processed-data`
 Pastikan tiga file berikut telah berhasil diunggah:
 
-- **`cleaned_insurance_data.parquet`** — hasil *data cleaning* dan *feature engineering*
-- **`insurance_model.pkl`** — model Machine Learning yang telah dilatih dan disimpan dalam format pickle
-- **`sentiment_analysis_results.parquet`** — model Machine Learning yang telah dilatih dan disimpan dalam format pickle
-
-#### Dokumentasi Tampilan:
-![Screenshot 2025-06-20 120451](https://github.com/user-attachments/assets/423203b8-5cfb-4187-9f83-86095cbee3ab)
+![Screenshot 2025-06-20 155237](https://github.com/user-attachments/assets/d95b33e2-b585-48cb-9ee7-3fb1e6be10aa)
 
 
 #### _Notes_ :
 - Pastikan `producer.py` dan `consumer.py` telah selesai dijalankan sehingga data mentah tersedia di bucket `raw-data`.
-- Skrip `prepare_data.py` dan `train_model.py` menggunakan:
-  - **MinIO SDK for Python** untuk komunikasi ke object storage
-  - **pandas** untuk manipulasi data
-  - **scikit-learn** untuk pelatihan dan evaluasi model
-  - **pickle** untuk serialisasi model
-- Proses transformasi data mencakup:
-  - *Handling missing values* (menghapus baris kosong)
-  - *Encoding* kolom kategorikal
-  - Normalisasi nama kolom agar konsisten
-
 ---
+
+#### Dashboard Streamlit
+
+![Screenshot 2025-06-20 155641](https://github.com/user-attachments/assets/cdd2543e-f768-4575-bf20-7d3469a581c3)
+
+![Screenshot 2025-06-20 155652](https://github.com/user-attachments/assets/306890c7-e8c7-4775-a6d6-1538befb27ff)
+
+![Screenshot 2025-06-20 155709](https://github.com/user-attachments/assets/ad29876f-652d-4826-a05d-e8110ca10efb)
+
 
 ## 🚀 Menjalankan Proyek dengan 1 command
 
