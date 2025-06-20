@@ -274,14 +274,19 @@ Pastikan tiga file berikut telah berhasil diunggah:
 - Pastikan `producer.py` dan `consumer.py` telah selesai dijalankan sehingga data mentah tersedia di bucket `raw-data`.
 ---
 
-#### Dashboard Streamlit
+
+### Dashboard Streamlit
 
 ![Screenshot 2025-06-20 155641](https://github.com/user-attachments/assets/cdd2543e-f768-4575-bf20-7d3469a581c3)
 
+
 ![Screenshot 2025-06-20 155652](https://github.com/user-attachments/assets/306890c7-e8c7-4775-a6d6-1538befb27ff)
+
 
 ![Screenshot 2025-06-20 155709](https://github.com/user-attachments/assets/ad29876f-652d-4826-a05d-e8110ca10efb)
 
+
+---
 
 ## 🚀 Menjalankan Proyek dengan 1 command
 
