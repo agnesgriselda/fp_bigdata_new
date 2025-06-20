@@ -1,68 +1,122 @@
-# api_service/main.py (Revisi Final Anti-Seek Error)
+# api_service/main.py (Versi Final dengan Endpoint Prediksi & Review)
 
 import os
 import io
-import joblib
 import pandas as pd
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from minio import Minio
 
-# --- Konfigurasi ---
-app = FastAPI(title="API Prediksi Keterlambatan Penerbangan")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+# --- Konfigurasi Aplikasi FastAPI ---
+app = FastAPI(
+    title="API Analisis Penerbangan",
+    description="Menyediakan estimasi keterlambatan (dari model PySpark) dan sampel ulasan sentimen.",
+    version="2.1.0"
+)
+
+# Izinkan semua origin untuk kemudahan pengembangan frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- Konfigurasi MinIO ---
 MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "localhost:9000")
 MINIO_ACCESS_KEY = "minioadmin"
 MINIO_SECRET_KEY = "minioadmin"
 BUCKET_NAME = "processed-data"
-MODEL_FILE_KEY = "flight_delay_model.pkl"
+ARTIFACT_FILE_KEY = "spark_model_feature_importances.csv"
+SENTIMENT_FILE_KEY = "sentiment_analysis_results.parquet"
 
-# --- Load Model dari MinIO saat Startup ---
-model = None
-model_features = []
-try:
-    client = Minio(MINIO_ENDPOINT, access_key=MINIO_ACCESS_KEY, secret_key=MINIO_SECRET_KEY, secure=False)
-    
-    # Download file model ke buffer memori
-    response = client.get_object(BUCKET_NAME, MODEL_FILE_KEY)
-    model_bytes = response.read()
-    model_buffer = io.BytesIO(model_bytes)
-    
-    # Load model dari buffer memori
-    model = joblib.load(model_buffer)
-    
-    print(f"Model '{MODEL_FILE_KEY}' berhasil di-load dari MinIO.")
-    model_features = model.feature_names_in_
-except Exception as e:
-    print(f"GAGAL me-load model dari MinIO: {e}")
-finally:
-     if 'response' in locals() and response:
-            response.close()
-            response.release_conn()
+# --- State Aplikasi: Muat Data & Artefak saat Startup ---
+app_data = {
+    "importances": None,
+    "reviews": None
+}
 
-# --- Model Data Input ---
+@app.on_event("startup")
+def load_artifacts_and_data():
+    """
+    Memuat semua file yang diperlukan dari MinIO saat aplikasi dimulai.
+    """
+    print("Mencoba memuat semua data dan artefak dari MinIO...")
+    try:
+        client = Minio(
+            MINIO_ENDPOINT,
+            access_key=MINIO_ACCESS_KEY,
+            secret_key=MINIO_SECRET_KEY,
+            secure=False
+        )
+        
+        # 1. Muat Artefak Prediksi Delay
+        response_pred = client.get_object(BUCKET_NAME, ARTIFACT_FILE_KEY)
+        app_data["importances"] = pd.read_csv(io.BytesIO(response_pred.read()))
+        print(f"Artefak '{ARTIFACT_FILE_KEY}' berhasil dimuat.")
+        
+        # 2. Muat Data Hasil Analisis Sentimen
+        response_senti = client.get_object(BUCKET_NAME, SENTIMENT_FILE_KEY)
+        app_data["reviews"] = pd.read_parquet(io.BytesIO(response_senti.read()))
+        print(f"Data '{SENTIMENT_FILE_KEY}' berhasil dimuat.")
+
+    except Exception as e:
+        print(f"GAGAL memuat data/artefak dari MinIO: {e}")
+        print("API akan berjalan, tetapi endpoint akan mengembalikan error.")
+
+# --- Model Data Input (Request Body) ---
 class FlightPredictionRequest(BaseModel):
-    year: int; month: int; day: int; day_of_week: int
+    month: int
+    day: int
     airline: str
     departure_delay: int
     distance: int
 
-# --- Endpoint Prediksi ---
+# --- Endpoint Prediksi (Simulasi) ---
 @app.post("/predict")
-def predict_flight_delay(data: FlightPredictionRequest):
-    if model is None: return {"error": "Model tidak tersedia."}
+def simulate_flight_delay_prediction(data: FlightPredictionRequest):
+    if app_data["importances"] is None:
+        raise HTTPException(status_code=503, detail="Artefak model prediksi tidak tersedia.")
     
     try:
-        input_df = pd.DataFrame([data.dict()])
-        input_df_encoded = pd.get_dummies(input_df, columns=['airline'], prefix='airline', drop_first=False)
-        
-        final_df = pd.DataFrame(columns=model_features).fillna(0)
-        final_df = pd.concat([final_df, input_df_encoded], ignore_index=True, sort=False).fillna(0)
-        final_df = final_df[model_features]
+        importances_df = app_data["importances"]
+        delay_weight = importances_df[importances_df.feature == 'DEPARTURE_DELAY']['importance'].values.item(0)
+        distance_weight = importances_df[importances_df.feature == 'DISTANCE']['importance'].values.item(0)
+        airline_feature_name = f"AIRLINE_{data.airline.upper()}"
+        airline_row = importances_df[importances_df.feature == airline_feature_name]
+        airline_weight = airline_row['importance'].values.item(0) if not airline_row.empty else 0
 
-        prediction = model.predict(final_df)
-        return {"predicted_arrival_delay": round(prediction[0], 2)}
-
+        base_prediction = (
+            (data.departure_delay * delay_weight) +
+            (data.distance * distance_weight / 100) +
+            (airline_weight * 50)
+        ) * 250
+        final_prediction = max(-30, min(base_prediction, 240))
+        return {"predicted_arrival_delay": round(final_prediction, 2)}
     except Exception as e:
-        return {"error": f"Terjadi kesalahan saat prediksi: {str(e)}"}
+        raise HTTPException(status_code=500, detail=f"Terjadi kesalahan saat kalkulasi prediksi: {str(e)}")
+
+# --- Endpoint untuk Ulasan ---
+@app.get("/reviews")
+def get_sample_reviews(count: int = 3):
+    if app_data["reviews"] is None:
+        raise HTTPException(status_code=503, detail="Data ulasan tidak tersedia.")
+    
+    sample_reviews = app_data["reviews"].sample(n=count)
+    return sample_reviews.to_dict(orient="records")
+
+# --- Endpoint Status ---
+@app.get("/")
+def read_root():
+    pred_status = "OK" if app_data["importances"] is not None else "Error"
+    senti_status = "OK" if app_data["reviews"] is not None else "Error"
+    return {
+        "service": "Flight Analysis API",
+        "status": "online",
+        "artifacts": {
+            "prediction_model_insights": pred_status,
+            "sentiment_data": senti_status
+        }
+    }
