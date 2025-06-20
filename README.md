@@ -55,38 +55,6 @@ Pendekatan data lakehouse yang fleksibel sangat sesuai untuk menangani volume da
 | **Streamlit** | Membangun dashboard interaktif untuk menampilkan wawasan dari model PySpark dan hasil analisis sentimen. |
 | **FastAPI** *(opsional)* | API ringan untuk menyajikan model secara programatis agar dapat digunakan oleh sistem lain. |
 
-## Alur Kerja
-
-1. **Ingest Data**
-   - File `producer.py` membaca `flights.csv` baris demi baris.
-   - Data dikirim ke *topic* Kafka bernama `flight-data`.
-
-2. **Store Raw Data**
-   - File `consumer.py` menerima data dari Kafka.
-   - Setiap data disimpan sebagai file JSON individual di bucket `raw-data` MinIO.
-
-3. **Preprocessing (ETL)**
-   - File `prepare_data.py` membaca seluruh JSON dari bucket `raw-data`.
-   - Melakukan:
-     - Pembersihan data
-     - Feature engineering
-   - Menyimpan hasil bersih sebagai `cleaned_flight_data.csv` di bucket `processed-data`.
-
-4. **Modeling**
-   - File `train_model.py` membaca data CSV yang sudah dibersihkan.
-   - Melatih model regresi untuk memprediksi `ARRIVAL_DELAY`.
-   - Menyimpan model sebagai file `.pkl` ke MinIO.
-
-5. **Result Storage**
-   - Model (`flight_delay_model.pkl`) disimpan di bucket `processed-data`.
-
-6. **Visualization**
-   - Dashboard di `app.py` (Streamlit) memuat model dari MinIO.
-   - Pengguna dapat:
-     - Memasukkan detail penerbangan
-     - Melihat prediksi keterlambatan
-     - Melihat visualisasi faktor-faktor keterlambatan
-
 ### Tech Stack
 
 | Kategori              | Teknologi                                      |
