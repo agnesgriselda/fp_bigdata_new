@@ -272,7 +272,7 @@ file dengan type `unstructured` format .txt kami tambahkan ke data_source untuk 
 
 ### Langkah 5-6: Memproses Data dan Melatih Model (Machine Learning)
 
-Setelah data mentah berhasil dikumpulkan di bucket `raw-data` MinIO, langkah selanjutnya adalah memprosesnya menjadi dataset bersih dan membangun model prediktif berbasis Machine Learning.
+Setelah data mentah berhasil dikumpulkan di bucket `raw-data` dan `unstructured-raw-data` MinIO, langkah selanjutnya adalah memprosesnya menjadi dataset bersih dan membangun model prediktif berbasis Machine Learning.
 
 #### Struktur Direktori
 ```
@@ -292,6 +292,7 @@ fp-bigdata
 ├── machine_learning/
 │   ├── prepare_data.py (kita isi bagian ini)
 │   └── train_model.py  (dan ini)
+│   └── analyze_sentiment.py  (dan ini)
 ```
 
 ### 1. Persiapan Data (prepare_data.py)
@@ -309,39 +310,43 @@ fp-bigdata
 ```bash
 python machine_learning/prepare_data.py
 ```
-![Screenshot 2025-06-16 030520](https://github.com/user-attachments/assets/94ab28cc-5d56-4a52-82c5-aa2f5485ee58)
-
 ![Screenshot 2025-06-16 030540](https://github.com/user-attachments/assets/918e6571-12fd-4521-88e0-58d2043e0e7c)
 
 
-### 2. Train Model (train_model.py)
+### 2. Train Model (train_model.py & analyze_sentiment.py)
 
 #### Lokasi:
-`machine_learning/train_model.py`
-
-#### Fungsi:
-- Mengambil `cleaned_insurance_data.csv` dari bucket processed-data.
-- Melatih model _RandomForestRegressor_ untuk memprediksi charges.
-- Menyimpan model hasil pelatihan `(insurance_model.pkl)` ke `bucket processed-data`.
+`machine_learning/train_model.py`  `machine_learning/analyze_sentiment.py`
 
 #### Jalankan Skrip:
 
 ```bash
 python machine_learning/train_model.py
 ```
+![Screenshot 2025-06-20 115745](https://github.com/user-attachments/assets/d4d2d4a1-c9a4-48c3-8793-360a2ba4127c)
+
+
+```bash
+python machine_learning/analyze_sentiment.py
+```
+![Screenshot 2025-06-20 115803](https://github.com/user-attachments/assets/79e80afe-aedb-43f9-86d2-3a9b8d8aaca1)
+
+
 ### 3. Validasi Hasil
 
 #### Buka MinIO Web UI
 Akses antarmuka pengguna MinIO melalui browser: `http://localhost:9001`
 
 #### Navigasi ke Bucket `processed-data`
-Pastikan dua file berikut telah berhasil diunggah:
+Pastikan tiga file berikut telah berhasil diunggah:
 
-- **`cleaned_insurance_data.csv`** — hasil *data cleaning* dan *feature engineering*
+- **`cleaned_insurance_data.parquet`** — hasil *data cleaning* dan *feature engineering*
 - **`insurance_model.pkl`** — model Machine Learning yang telah dilatih dan disimpan dalam format pickle
+- **`sentiment_analysis_results.parquet`** — model Machine Learning yang telah dilatih dan disimpan dalam format pickle
 
 #### Dokumentasi Tampilan:
-![Screenshot 2025-06-16 073632](https://github.com/user-attachments/assets/1244d176-b1e6-43af-9c43-93bed693c546)
+![Screenshot 2025-06-20 120451](https://github.com/user-attachments/assets/423203b8-5cfb-4187-9f83-86095cbee3ab)
+
 
 #### _Notes_ :
 - Pastikan `producer.py` dan `consumer.py` telah selesai dijalankan sehingga data mentah tersedia di bucket `raw-data`.
@@ -354,9 +359,6 @@ Pastikan dua file berikut telah berhasil diunggah:
   - *Handling missing values* (menghapus baris kosong)
   - *Encoding* kolom kategorikal
   - Normalisasi nama kolom agar konsisten
-
-#### Evaluasi Model
-![Screenshot 2025-06-16 072711](https://github.com/user-attachments/assets/22183e8a-50a4-4f60-a3d0-bc18272f2832)
 
 ---
 
