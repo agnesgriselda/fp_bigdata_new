@@ -12,6 +12,7 @@ minio
 # Streaming
 kafka-python==2.0.2
 lz4
+vaderSentiment
 
 # API Service
 fastapi
