@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flight Delay Predictor ✈️</title>
+    <title>Flight Delay Estimator ✈️ (PySpark)</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;700&display=swap" rel="stylesheet">
@@ -11,51 +11,64 @@
 </head>
 <body>
     <div class="card">
-        <h1>Prediktor Keterlambatan Penerbangan</h1>
+        <h1>Estimator Keterlambatan Penerbangan</h1>
+        <p class="subtitle">US Flights</p>
+
         <form id="prediction-form">
-            <!-- (Isi form tidak perlu diubah) -->
-             <div class="form-grid">
-                    <label>Tahun</label>
-                    <input type="number" name="year" value="2015" required>
+            <div class="form-grid">
+                <div>
                     <label>Bulan</label>
                     <input type="number" name="month" value="8" min="1" max="12" required>
                 </div>
-                <div class="form-grid">
+                <div>
                     <label>Tanggal</label>
                     <input type="number" name="day" value="15" min="1" max="31" required>
-                    <label>Hari ke-</label>
-                    <input type="number" name="day_of_week" value="6" min="1" max="7" required>
                 </div>
-                <div class="form-grid">
+            </div>
+            <div class="form-grid">
+                <div>
                     <label>Jarak (mil)</label>
                     <input type="number" name="distance" value="800" required>
+                </div>
+                <div>
                     <label>Delay Berangkat (menit)</label>
                     <input type="number" name="departure_delay" value="10" required>
                 </div>
-                <label>Pilih Maskapai</label>
-                <select name="airline" required>
-                    <option value="UA">United Airlines</option>
-                    <option value="AA">American Airlines</option>
-                    <option value="US">US Airways</option>
-                    <option value="F9">Frontier Airlines</option>
-                    <option value="B6">JetBlue Airways</option>
-                    <option value="OO">SkyWest Airlines</option>
-                    <option value="AS">Alaska Airlines</option>
-                    <option value="NK">Spirit Airlines</option>
-                    <option value="WN">Southwest Airlines</option>
-                    <option value="DL">Delta Air Lines</option>
-                    <option value="EV">Atlantic Southeast Airlines</option>
-                    <option value="HA">Hawaiian Airlines</option>
-                    <option value="MQ">Envoy Air</option>
-                    <option value="VX">Virgin America</option>
-                </select>
+            </div>
+            
+            <label>Pilih Maskapai</label>
+            <select name="airline" required>
+                <option value="UA">United Airlines</option>
+                <option value="AA">American Airlines</option>
+                <option value="US">US Airways</option>
+                <option value="F9">Frontier Airlines</option>
+                <option value="B6">JetBlue Airways</option>
+                <option value="OO">SkyWest Airlines</option>
+                <option value="AS">Alaska Airlines</option>
+                <option value="NK">Spirit Airlines</option>
+                <option value="WN">Southwest Airlines</option>
+                <option value="DL">Delta Air Lines</option>
+                <option value="EV">Atlantic Southeast Airlines</option>
+                <option value="HA">Hawaiian Airlines</option>
+                <option value="MQ">Envoy Air</option>
+                <option value="VX">Virgin America</option>
+            </select>
+            
             <button type="submit" id="submit-btn">Analisis Prediksi</button>
         </form>
+        
         <div class="result-container" id="result" style="display: none;">
-            <h2>Estimasi Status Kedatangan</h2>
+            <h2>Hasil Estimasi</h2>
             <p id="prediction-output"></p>
         </div>
+
+        <!-- Kontainer untuk menampilkan ulasan sentimen -->
+        <div class="reviews-section" id="reviews-container" style="display: none;">
+            <h2>Ulasan Penumpang</h2>
+            <ul id="reviews-list"></ul>
+        </div>
     </div>
+    
     <script src="script.js"></script>
 </body>
 </html>
