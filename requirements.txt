@@ -9,6 +9,9 @@ pyarrow
 boto3
 minio
 
+pyspark
+delta-spark
+
 # Streaming
 kafka-python==2.0.2
 lz4

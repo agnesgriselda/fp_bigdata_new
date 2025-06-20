@@ -1,4 +1,4 @@
-# dashboard/app.py (Versi Final, Anti-KeyError, Tampilan Profesional)
+# dashboard/app.py (Versi Final untuk Model PySpark & Analisis Sentimen)
 
 import streamlit as st
 import pandas as pd
@@ -11,147 +11,162 @@ import os
 # BAGIAN 1: KONFIGURASI DAN FUNGSI HELPER
 # =================================================================================
 
-# --- Konfigurasi MinIO (Satu Kali Definisi) ---
+# --- Konfigurasi MinIO ---
 MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "localhost:9000")
 MINIO_ACCESS_KEY = "minioadmin"
 MINIO_SECRET_KEY = "minioadmin"
-BUCKET_NAME = "processed-data"
-DATA_FILE_KEY = "cleaned_flight_data.parquet"
+PROCESSED_BUCKET = "processed-data"
 
-@st.cache_data
-def load_data_from_minio():
-    """Download file Parquet ke memori dulu, baru dibaca oleh Pandas."""
+# --- Fungsi Caching untuk Load Artefak & Data dari MinIO ---
+@st.cache_resource
+def get_minio_client():
+    """Membuat koneksi MinIO yang di-cache."""
+    return Minio(MINIO_ENDPOINT, access_key=MINIO_ACCESS_KEY, secret_key=MINIO_SECRET_KEY, secure=False)
+
+@st.cache_data(ttl=3600) # Cache data selama 1 jam
+def load_spark_artifacts():
+    """Memuat artefak yang disimpan oleh skrip training PySpark."""
+    client = get_minio_client()
     try:
-        client = Minio(MINIO_ENDPOINT, access_key=MINIO_ACCESS_KEY, secret_key=MINIO_SECRET_KEY, secure=False)
-        response = client.get_object(BUCKET_NAME, DATA_FILE_KEY)
-        parquet_bytes = response.read()
-        parquet_buffer = io.BytesIO(parquet_bytes)
-        df = pd.read_parquet(parquet_buffer)
-        print("Dashboard: Berhasil memuat data dari MinIO.")
-        return df
+        # Muat Feature Importances
+        response = client.get_object(PROCESSED_BUCKET, 'spark_model_feature_importances.csv')
+        importances_df = pd.read_csv(io.BytesIO(response.read()))
+        return importances_df
     except Exception as e:
-        st.error(f"Gagal mengambil data dari MinIO untuk Dashboard: {e}")
+        st.error(f"Gagal memuat artefak model PySpark: {e}")
+        st.error("Pastikan Anda sudah menjalankan 'prepare_data_spark.py' dan 'train_model_spark.py' terlebih dahulu.")
         return None
-    finally:
-        if 'response' in locals() and response:
-            response.close()
-            response.release_conn()
 
-def reverse_one_hot_encoding(df, prefix):
-    """Mengembalikan kolom yang sudah di-one-hot-encode ke bentuk aslinya."""
-    encoded_columns = [col for col in df.columns if col.startswith(prefix)]
-    if not encoded_columns: return None
-    original_series = df[encoded_columns].idxmax(axis=1).apply(lambda x: x.replace(prefix + '_', ''))
-    return original_series
+@st.cache_data(ttl=3600)
+def load_sentiment_results():
+    """Memuat hasil analisis sentimen."""
+    client = get_minio_client()
+    try:
+        response = client.get_object(PROCESSED_BUCKET, 'sentiment_analysis_results.parquet')
+        df = pd.read_parquet(io.BytesIO(response.read()))
+        return df
+    except Exception:
+        # Jangan tampilkan error jika file belum ada, cukup kembalikan None
+        return None
 
 # =================================================================================
-# BAGIAN 2: UTAMA APLIKASI STREAMLIT
+# BAGIAN 2: HALAMAN-HALAMAN DASHBOARD
 # =================================================================================
 
-st.set_page_config(page_title="Dashboard Analisis Penerbangan", layout="wide", initial_sidebar_state="expanded")
-st.title("✈️ Dashboard Analisis Keterlambatan Penerbangan")
-
-df_raw = load_data_from_minio()
-
-# --- PENANGANAN ERROR UTAMA ---
-# Hanya lanjutkan jika DataFrame (df_raw) berhasil dimuat dan tidak kosong
-if df_raw is not None and not df_raw.empty:
-    df = df_raw.copy()
+def page_delay_analysis_spark():
+    """Halaman untuk menampilkan wawasan dari model prediksi PySpark."""
+    st.title("✈️ Analisis Keterlambatan Penerbangan (ditenagai PySpark)")
+    st.markdown("Dashboard ini menampilkan wawasan yang diekstrak langsung dari model Machine Learning yang dilatih pada **Spark**, bukan hanya visualisasi data mentah.")
     
-    # Rekonstruksi kolom 'airline_name' agar lebih user-friendly
-    airline_series = reverse_one_hot_encoding(df, 'airline')
-    if airline_series is not None:
-        df['airline_name'] = airline_series
-    
-    # --- SIDEBAR FILTER ---
-    st.sidebar.header("✈️ Filter Data")
-    
-    airline_list = ['Semua']
-    if 'airline_name' in df.columns:
-        airline_list.extend(sorted(df['airline_name'].unique()))
-    selected_airline = st.sidebar.selectbox("Pilih Maskapai", airline_list)
+    importances_df = load_spark_artifacts()
+    if importances_df is None:
+        st.warning("Artefak model tidak ditemukan. Silakan jalankan pipeline training PySpark terlebih dahulu.")
+        return
 
-    month_list = ['Semua'] + sorted(df['month'].unique().tolist())
-    selected_month = st.sidebar.selectbox("Pilih Bulan", month_list)
-
-    # Terapkan filter
-    filtered_df = df.copy()
-    if selected_airline != 'Semua' and 'airline_name' in filtered_df.columns:
-        filtered_df = filtered_df[filtered_df['airline_name'] == selected_airline]
-    if selected_month != 'Semua':
-        filtered_df = filtered_df[filtered_df['month'] == selected_month]
-
-    # --- HEADER & KPI ---
-    st.markdown("Analisis interaktif untuk memahami pola keterlambatan penerbangan di AS berdasarkan **500,000 data sampel**.")
-    
-    kpi1, kpi2, kpi3 = st.columns(3)
-    if not filtered_df.empty:
-        avg_dep_delay = filtered_df['departure_delay'].mean()
-        avg_arr_delay = filtered_df['arrival_delay'].mean()
-        total_flights = len(filtered_df)
-    else:
-        avg_dep_delay, avg_arr_delay, total_flights = 0, 0, 0
-
-    kpi1.metric("Rata-rata Delay Keberangkatan", f"{avg_dep_delay:.1f} menit")
-    kpi2.metric("Rata-rata Delay Kedatangan", f"{avg_arr_delay:.1f} menit")
-    kpi3.metric("Total Penerbangan (Filtered)", f"{total_flights:,}")
-    
     st.divider()
 
-    # --- VISUALISASI UTAMA DENGAN TABS ---
-    st.subheader("Analisis Mendalam Keterlambatan")
-    tab1, tab2, tab3 = st.tabs(["📊 Per Maskapai", "📈 Tren Bulanan", "🔥 Pola Waktu (Heatmap)"])
-
-    with tab1:
-        st.markdown("##### Maskapai Mana yang Paling Sering Terlambat?")
-        if 'airline_name' in filtered_df.columns and not filtered_df.empty:
-            avg_delay_per_airline = filtered_df.groupby('airline_name')['arrival_delay'].mean().sort_values().reset_index()
-            fig1 = px.bar(avg_delay_per_airline, x='arrival_delay', y='airline_name', orientation='h',
-                          labels={'arrival_delay': 'Rata-rata Delay (menit)', 'airline_name': 'Maskapai'},
-                          color='arrival_delay', color_continuous_scale=px.colors.sequential.Plasma,
-                          text_auto='.2s')
-            fig1.update_traces(textposition='outside')
-            st.plotly_chart(fig1, use_container_width=True)
-            st.caption("Grafik ini menunjukkan rata-rata keterlambatan kedatangan untuk setiap maskapai.")
+    # --- Tampilkan Wawasan Utama dari Model ---
+    st.subheader("Faktor Paling Berpengaruh pada Keterlambatan")
+    st.write("Grafik ini menunjukkan fitur apa yang dianggap paling penting oleh model PySpark dalam memprediksi keterlambatan. Semakin panjang bar, semakin besar pengaruhnya.")
     
-    with tab2:
-        st.markdown("##### Bagaimana Pola Keterlambatan Sepanjang Tahun?")
-        if not filtered_df.empty:
-            avg_delay_per_month = filtered_df.groupby('month')[['departure_delay', 'arrival_delay']].mean().reset_index()
-            fig2 = px.line(avg_delay_per_month, x='month', y=['departure_delay', 'arrival_delay'],
-                           labels={'value': 'Rata-rata Delay (menit)', 'month': 'Bulan', 'variable': 'Tipe Delay'}, markers=True)
-            st.plotly_chart(fig2, use_container_width=True)
-            st.caption("Grafik ini menunjukkan tren keterlambatan bulanan. Puncak keterlambatan biasanya terjadi pada musim liburan atau cuaca buruk.")
+    # Ambil 15 fitur teratas
+    top_features = importances_df.head(15)
+    
+    fig = px.bar(
+        top_features,
+        x='importance',
+        y='feature',
+        orientation='h',
+        title='Top 15 Feature Importances dari Model RandomForest PySpark',
+        labels={'importance': 'Tingkat Kepentingan (Importance Score)', 'feature': 'Faktor / Fitur'},
+        color='importance',
+        color_continuous_scale=px.colors.sequential.Viridis
+    )
+    fig.update_layout(yaxis={'categoryorder':'total ascending'}) # Urutkan dari terpenting di atas
+    st.plotly_chart(fig, use_container_width=True)
+    
+    st.info("""
+    **Bagaimana Membaca Grafik Ini?**
+    - **DEPARTURE_DELAY**: Secara konsisten menjadi faktor paling penting. Ini logis, karena jika pesawat sudah terlambat berangkat, kemungkinan besar ia akan terlambat tiba.
+    - **DISTANCE**: Jarak tempuh juga berpengaruh signifikan.
+    - **AIRLINE_...**: Nama-nama maskapai yang telah di-encode menunjukkan bahwa beberapa maskapai secara inheren memiliki pola keterlambatan yang berbeda dari yang lain.
+    """)
 
-    with tab3:
-        st.markdown("##### Kapan Waktu Terburuk untuk Terbang?")
-        
-        # --- PERBAIKAN FINAL DI SINI ---
-        # Definisikan kolom yang dibutuhkan untuk heatmap
-        heatmap_cols = ['month', 'day_of_week', 'arrival_delay']
-        
-        # Cek apakah semua kolom yang dibutuhkan ada DAN DataFrame tidak kosong
-        if all(col in filtered_df.columns for col in heatmap_cols) and not filtered_df.empty:
-            heatmap_data = filtered_df.groupby(['month', 'day_of_week'])['arrival_delay'].mean().reset_index()
-            heatmap_pivot = heatmap_data.pivot(index='day_of_week', columns='month', values='arrival_delay')
+def page_sentiment_analysis():
+    """Halaman untuk menampilkan hasil analisis sentimen ulasan."""
+    st.title("📊 Analisis Sentimen Ulasan Pelanggan")
+    st.markdown("Menganalisis sentimen dari ulasan teks tidak terstruktur yang diberikan oleh penumpang.")
+
+    reviews_df = load_sentiment_results()
+    if reviews_df is None:
+        st.warning("Data hasil analisis sentimen belum tersedia. Jalankan `analyze_sentiment.py` terlebih dahulu.")
+        return
+
+    st.divider()
+
+    # --- Visualisasi Utama ---
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        st.subheader("Distribusi Sentimen")
+        sentiment_counts = reviews_df['sentiment'].value_counts()
+        fig_pie = px.pie(
+            sentiment_counts, 
+            values=sentiment_counts.values, 
+            names=sentiment_counts.index, 
+            hole=.3,
+            color=sentiment_counts.index,
+            color_discrete_map={'Positive':'#2ca02c', 'Negative':'#d62728', 'Neutral':'#7f7f7f'}
+        )
+        fig_pie.update_traces(textinfo='percent+label', pull=[0.05, 0.05, 0.05])
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+    with col2:
+        # Coba ekstrak nama maskapai dari teks ulasan untuk analisis tambahan
+        try:
+            # Menggunakan regex sederhana untuk mengekstrak nama maskapai dari teks ulasan
+            # Ini mungkin tidak sempurna tapi cukup baik untuk demo
+            reviews_df['airline_from_text'] = reviews_df['text'].str.extract(r"dengan (\w+\s?\w*)")[0]
+            airline_sentiment = reviews_df.groupby(['airline_from_text', 'sentiment']).size().unstack(fill_value=0)
+            airline_sentiment = airline_sentiment.sort_values(by=['Positive', 'Negative'], ascending=[False, True]).head(10)
             
-            # Mapping nama hari agar lebih mudah dibaca dan diurutkan
-            hari = {1: '1-Senin', 2: '2-Selasa', 3: '3-Rabu', 4: '4-Kamis', 5: '5-Jumat', 6: '6-Sabtu', 7: '7-Minggu'}
-            heatmap_pivot = heatmap_pivot.rename(index=hari).sort_index()
-            
-            fig3 = px.imshow(heatmap_pivot, text_auto='.1f', aspect="auto",
-                             labels=dict(x="Bulan", y="Hari", color="Rata-rata Delay"),
-                             color_continuous_scale='Reds')
-            st.plotly_chart(fig3, use_container_width=True)
-            st.caption("Heatmap ini menunjukkan 'hotspot' keterlambatan. Kotak yang lebih merah menandakan rata-rata keterlambatan yang lebih tinggi.")
-        else:
-            st.warning("Data tidak cukup atau kolom yang dibutuhkan (day_of_week) tidak ditemukan untuk membuat heatmap.")
-            st.write("Kolom yang tersedia:", filtered_df.columns.tolist())
+            st.subheader("Sentimen per Maskapai (Top 10)")
+            fig_bar = px.bar(airline_sentiment, barmode='stack',
+                             labels={'value': 'Jumlah Ulasan', 'airline_from_text': 'Maskapai'},
+                             color_discrete_map={'Positive':'#2ca02c', 'Negative':'#d62728', 'Neutral':'#7f7f7f'})
+            st.plotly_chart(fig_bar, use_container_width=True)
+        except Exception:
+            st.info("Tidak dapat mengekstrak sentimen per maskapai dari data saat ini.")
 
-    # --- TABEL DATA ---
-    with st.expander("Lihat Sampel Data (setelah difilter)"):
-        st.info(f"Untuk menjaga performa, tabel di bawah hanya menampilkan 1,000 baris pertama dari total {total_flights:,} baris data yang telah difilter.")
-        st.dataframe(filtered_df.head(500000))
+    # --- Tabel Data Ulasan ---
+    with st.expander("Jelajahi Data Ulasan Individual"):
+        st.dataframe(reviews_df[['text', 'sentiment']])
 
-else:
-    st.error("Gagal memuat data awal dari MinIO. Pastikan proses backend (ETL & Training) telah berjalan dengan sukses.")
+# =================================================================================
+# BAGIAN 3: NAVIGASI DAN LAYOUT UTAMA
+# =================================================================================
+
+st.set_page_config(page_title="Dashboard Aviasi", layout="wide", initial_sidebar_state="expanded")
+
+# --- Sidebar ---
+with st.sidebar:
+    st.header("✈️ Dashboard Aviasi")
+    st.write("Analisis Big Data & Machine Learning")
+    
+    page = st.radio(
+        "Pilih Halaman Analisis:",
+        ("Analisis Keterlambatan (PySpark)", "Analisis Sentimen Ulasan"),
+        key="page_selection"
+    )
+    
+    st.divider()
+    st.info(
+        "Proyek ini mendemonstrasikan pipeline data end-to-end dari Kafka, MinIO, "
+        "hingga pemrosesan terdistribusi dengan PySpark."
+    )
+
+# --- Routing Halaman ---
+if page == "Analisis Keterlambatan (PySpark)":
+    page_delay_analysis_spark()
+elif page == "Analisis Sentimen Ulasan":
+    page_sentiment_analysis()
