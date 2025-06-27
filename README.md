@@ -255,6 +255,13 @@ Pastikan tiga file berikut telah berhasil diunggah:
 
 
 ---
+### Dashboard Frontend
+
+![Screenshot 2025-06-27 095453](https://github.com/user-attachments/assets/fd29a4ee-f5a0-420e-8c41-eb76c4f11a44)
+
+![Screenshot 2025-06-27 095505](https://github.com/user-attachments/assets/13389d6e-6b99-4c7f-8b47-282b66b00af4)
+
+
 
 ## 🚀 Menjalankan Proyek dengan 1 command
 
@@ -291,13 +298,16 @@ Setelah terminal menampilkan log bahwa layanan Uvicorn dan Streamlit berjalan, b
 -   **Dashboard Analisis:**
     -  **`http://localhost:8501`**
       
-![image](https://github.com/user-attachments/assets/bac660a2-56cf-42d1-a978-ef108c2ae881)
+![Screenshot 2025-06-20 155641](https://github.com/user-attachments/assets/5a7f82c1-2f7b-4df7-91cb-d05d2e25a883)
+
+![Screenshot 2025-06-20 155709](https://github.com/user-attachments/assets/1b2d73de-c0ec-44c7-909e-55bc0786f554)
 
 
 -   **UI Prediktor:**
     -  Buka file **`frontend_ui/index.html`**
     
-![image](https://github.com/user-attachments/assets/7710ef50-99ec-440b-9611-c10ac2c9b17a)
+![Screenshot 2025-06-27 095453](https://github.com/user-attachments/assets/a9f48cba-678b-4fe0-bf42-35ab57e6922d)
+
 
 
 ---
