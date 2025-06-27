@@ -40,7 +40,7 @@ Keterlambatan penerbangan adalah masalah kritis dalam industri aviasi yang berda
 
 ##  Arsitektur Solusi (Lakehouse Sederhana)
 
-![arsi fp bigdata drawio](https://github.com/user-attachments/assets/4a06d7df-7d6c-41cd-b8fb-999944c996d4)
+![image](https://github.com/user-attachments/assets/87db6d84-33d7-4378-90e0-b2886a5c0620)
 
 Pendekatan data lakehouse yang fleksibel sangat sesuai untuk menangani volume data penerbangan yang besar. Arsitektur ini memungkinkan kita untuk melakukan streaming, menyimpan data mentah, memprosesnya menjadi data terstruktur, dan melatih model dalam satu ekosistem yang terintegrasi.
 
